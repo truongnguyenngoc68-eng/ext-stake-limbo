@@ -1,0 +1,9 @@
+node_modules/
+outputs/
+slide-lab-v1.0.13-extension-update/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db

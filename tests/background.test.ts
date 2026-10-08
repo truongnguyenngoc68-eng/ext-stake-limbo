@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {telegramDefaults} from '../src/signals.ts';
+let listener:any;const data:Record<string,any>={};const sends:any[]=[];
+const base='chrome-extension://test-id/';
+Object.assign(globalThis,{chrome:{runtime:{id:'test-id',getURL:(p:string)=>base+p,onMessage:{addListener:(fn:any)=>listener=fn}},storage:{local:{get:async(k:string)=>({[k]:structuredClone(data[k])}),set:async(v:any)=>Object.assign(data,structuredClone(v))}},permissions:{contains:async()=>true},action:{onClicked:{addListener:()=>{}},setBadgeText:async()=>{},setTitle:async()=>{}},tabs:{create:async()=>{},sendMessage:async()=>{}}}});
+globalThis.fetch=async(_url:any,init:any)=>{sends.push(JSON.parse(init.body));return new Response(JSON.stringify({ok:true,result:{message_id:1}}),{status:200})};
+await import('../src/background.ts');
+const page={id:'test-id',url:'https://stake1022.com/vi/casino/games/slide'};
+const ui={id:'test-id',url:base+'index.html'};
+const request=(msg:any,sender:any=ui)=>new Promise<any>(resolve=>listener(msg,sender,resolve));
+test('Telegram worker protects secrets and sends plain compact messages once',async()=>{
+ const cfg=telegramDefaults();cfg.enabled=true;cfg.token='123456:'+'A'.repeat(30);cfg.chatId='-100123456789';
+ assert.equal((await request({type:'telegram-save',config:cfg})).ok,true);
+ const rules=await request({type:'signal-rules'},page);assert.ok(!('token' in rules));
+ assert.equal((await request({type:'telegram-get'},page)).ok,false);
+ const event={id:'test-round-1',kind:'round',time:1,text:'💰 [STAKE] R1 · x2.26\n• 450: 1/6 - 1/438v'};
+ assert.equal((await request({type:'signal-event',event},page)).ok,true);
+ assert.equal((await request({type:'signal-event',event},page)).duplicate,true);
+ assert.equal(sends.length,1);assert.equal(sends[0].chat_id,cfg.chatId);assert.equal(sends[0].parse_mode,undefined);
+ assert.equal(data['slide-signals-v1'][0].status,'Đã gửi Telegram');
+ const unsupported={...event,id:'bad'};assert.equal((await request({type:'signal-event',event:unsupported},{id:'test-id',url:'https://evil.example'})).ok,false);assert.equal(sends.length,1);
+});

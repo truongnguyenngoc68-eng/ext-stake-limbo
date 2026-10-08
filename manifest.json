@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Slide Lab v1.0.50 - Live Widgets",
+  "version": "1.0.50",
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "activeTab",
+    "scripting"
+  ],
+  "optional_host_permissions": [
+    "https://api.telegram.org/*"
+  ],
+  "description": "Slide tracker with persistent progress, Pause/Continue and optional reload resume after confirmed settlement.",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Mở Slide Lab Side Panel"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "minimum_chrome_version": "116",
+  "host_permissions": [
+    "https://stake1073.com/*",
+    "https://www.stake1073.com/*"
+  ]
+}

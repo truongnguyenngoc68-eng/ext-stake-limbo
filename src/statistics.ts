@@ -1,0 +1,3 @@
+import type {Round} from './model.ts';
+export function gapMatrix(rounds:Round[],thresholds:number[]){return thresholds.map(threshold=>{const hits=rounds.flatMap((r,i)=>r.value>=threshold?[i]:[]);const gaps=hits.slice(1).map((v,i)=>v-hits[i]-1);const current=hits.length?rounds.length-1-hits.at(-1)!:rounds.length;const average=gaps.length?gaps.reduce((a,b)=>a+b,0)/gaps.length:null;return {threshold,hits:hits.length,current,censored:!hits.length,average,max:gaps.length?Math.max(...gaps):null,ratio:average!==null&&average>0?current/average:null}})}
+export function stripColor(value:number){return value<3?'#c6c9d5':value<6?'#df536d':value<10?'#60c8a1':value<24?'#a875ed':value<45?'#528fde':value<88?'#df92c3':value<250?'#4b5063':value<460?'#7c8396':'#29c4ba'}
