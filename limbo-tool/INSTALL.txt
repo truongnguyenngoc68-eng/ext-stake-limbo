@@ -19,3 +19,7 @@ KIỂM THỬ
 TĂNG PHIÊN BẢN
 npm run release:limbo -- "đường dẫn thư mục tiện ích đã cài"
 Lệnh tự tăng patch version, tạo thư mục phát hành và chép vào thư mục đã cài. Sau đó Reload ở chrome://extensions. Bản unpacked không tự tải bản ZIP mới.
+
+Trước mỗi lần bắt đầu Auto, tool kiểm tra bảng thống kê trực tuyến. Nếu đóng, tool mở bảng và chờ đọc được profit/volume. Không xác nhận được trong 30 giây thì không bắt đầu Auto và ghi log lỗi. Không reset số liệu.
+
+Build Limbo: npm run build:limbo (giữ version), hoặc npm run release:limbo (tăng patch). Hai lệnh đều chạy test, đóng gói vào outputs, tự sao lưu và cập nhật thư mục Chrome đang nạp: C:\Users\truon\Downloads\limbo-tool-v1.3.0\limbo-tool. Sau build, chủ động reload extension khi không ảnh hưởng phiên đang chạy.

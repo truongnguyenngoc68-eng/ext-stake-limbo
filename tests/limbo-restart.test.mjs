@@ -5,6 +5,7 @@ import {JSDOM,VirtualConsole} from 'jsdom';
 const code=readFileSync(new URL('../limbo-tool/content.js',import.meta.url),'utf8');
 function fixture({manual=false,advanced=false,resume=null,remote=false}={}){
  const dom=new JSDOM(`<button data-testid="manual-tab">Thủ công</button><button data-testid="auto-tab">Tự động</button><button data-testid="auto-bet-button" data-autobet-status="start">Bắt Đầu Cược Tự Động</button><input type="number" data-testid="input-game-amount" data-bet-amount-active-currency="usdt" value="0"><input type="checkbox" data-testid="advanced-toggle-status-disabled"><div id="advanced"><input type="number" data-testid="stop-on-profit-input" value="0"><input type="number" data-testid="stop-on-loss-input" value="0"><input type="number" data-testid="limit-input" value="0"><button data-testid="reset-on-win-button">Reset</button><button data-testid="enable-on-win-button">Increase</button><input type="number" data-testid="on-win-input" value="0" disabled><button data-testid="reset-on-loss-button">Reset</button><button data-testid="enable-on-loss-button">Increase</button><input type="number" data-testid="on-loss-input" value="0" disabled></div><input type="number" data-testid="target-multiplier" value="2">`,{url:'https://stake1022.com/vi/casino/games/limbo',runScripts:'outside-only',virtualConsole:new VirtualConsole()});
+ const statsPanel=dom.window.document.createElement('div');statsPanel.innerHTML='<button data-testid="button-liveStats" data-active="true"></button><span data-testid="bets-stats-wagered">0</span><span data-testid="bets-stats-profit">0</span>';dom.window.document.body.append(statsPanel);
  const w=dom.window;let tick,time=1000,manualListener;const submissions=[],stops=[];
  const listeners=[];if(remote)w.chrome={runtime:{onMessage:{addListener:fn=>listeners.push(fn)},sendMessage:async()=>({})}};
  for(const id of ['input-game-amount','stop-on-profit-input','stop-on-loss-input'])w.document.querySelector(`[data-testid="${id}"]`).step='0.00000001';
@@ -137,5 +138,34 @@ for(const kind of ['max','min','custom','explicitStep','stakeStep','tpStep','slS
   if(kind==='max')percent.max='1';if(kind==='min')percent.min='2';if(kind==='custom')percent.setCustomValidity('Rejected');if(kind==='explicitStep')percent.step='1';
   if(kind==='stakeStep')f.input.step='0.01';if(kind==='tpStep')f.one('stop-on-profit-input').step='1';if(kind==='slStep'){f.field('sl','0.5');f.one('stop-on-loss-input').step='1'}
   f.click();f.pump(150);assert.equal(f.submissions.length,0);assert.match(f.status(),/Cấu hình không hợp lệ:/);
+ }finally{f.dom.window.close()}
+});
+
+test('Closed live statistics are opened before Auto, and an already open panel is never toggled',()=>{
+ const f=fixture();try{
+  const toggle=f.one('button-liveStats');toggle.setAttribute('data-active','false');f.one('bets-stats-profit').hidden=true;f.one('bets-stats-wagered').hidden=true;
+  let opened=0;toggle.onclick=()=>{opened++;toggle.setAttribute('data-active','true')};
+  f.click();f.pump(20);assert.equal(opened,1);assert.equal(f.submissions.length,0);
+  f.one('bets-stats-profit').hidden=false;f.one('bets-stats-wagered').hidden=false;
+  f.until(1);assert.equal(f.submissions.length,1);assert.equal(opened,1);
+  f.advance();f.complete();f.until(2);assert.equal(f.submissions.length,2);assert.equal(opened,1);
+ }finally{f.dom.window.close()}
+});
+test('Missing or unreadable live statistics block all Auto starts and report timeout',()=>{
+ for(const mode of ['missing','unreadable','ambiguous']){
+  const f=fixture();try{
+   if(mode==='missing'){f.one('button-liveStats').remove();f.one('bets-stats-wagered').remove()}
+   if(mode==='unreadable')f.one('bets-stats-wagered').textContent='…';
+   if(mode==='ambiguous')f.w.document.body.append(f.one('bets-stats-wagered').cloneNode(true));
+   f.click();f.pump(130);assert.equal(f.submissions.length,0);assert.match(f.status(),/bảng thống kê/);
+  }finally{f.dom.window.close()}
+ }
+});
+test('Each restart rechecks statistics and reopens a panel closed between cycles',()=>{
+ const f=fixture();try{
+  f.click();f.until(1);f.advance();f.complete();const toggle=f.one('button-liveStats');
+  toggle.setAttribute('data-active','false');f.one('bets-stats-wagered').hidden=true;
+  let opened=0;toggle.onclick=()=>{opened++;toggle.setAttribute('data-active','true');f.one('bets-stats-wagered').hidden=false};
+  f.until(2);assert.equal(opened,1);assert.equal(f.submissions.length,2);
  }finally{f.dom.window.close()}
 });

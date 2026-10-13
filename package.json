@@ -11,7 +11,9 @@
     "test:release": "node --test tests/release.test.mjs",
     "preview:research": "node scripts/preview-research.mjs",
     "test:research": "node --test tests/research.test.mjs",
-    "release:limbo": "node scripts/release-limbo.mjs"
+    "release:limbo": "node scripts/release-limbo.mjs",
+    "build:limbo": "node scripts/release-limbo.mjs --no-bump",
+    "test:limbo": "node --test tests/limbo-*.test.mjs"
   },
   "dependencies": {
     "vue": "3.5.22"

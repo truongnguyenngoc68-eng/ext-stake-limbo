@@ -52,7 +52,7 @@
   </div><button id="toggle">Bắt đầu Auto</button><output>Đang tắt</output><div class="body" id="extra"><button id="reloadNow">Reload khi lượt hoàn thành</button><button id="telegram">Telegram & Lịch sử</button><p>Tool áp dụng toàn bộ cấu hình trên khi bắt đầu và mỗi lần chạy lại. Bấm Dừng trên game sẽ tắt tool.</p></div></section>`;
   document.documentElement.append(host);
   const field=id=>root.querySelector('#'+id),status=root.querySelector('output');
-  let state='OFF',config=null,startedAt=0,lastAction=0,stableAt=0,readyAt=0,runningSeen=false,cycles=0,identity='',reloadAt=0,reloadWanted=false,initialReady=true;
+  let state='OFF',config=null,startedAt=0,lastAction=0,stableAt=0,readyAt=0,runningSeen=false,cycles=0,identity='',reloadAt=0,reloadWanted=false,initialReady=true,statsRequestedAt=0;
   const debug=(event,data={},level='info',trace)=>globalThis.LimboLog?.emit(event,data,level,trace);
   function debugSnapshot(){
     const ids=['input-game-amount','target-multiplier','stop-on-profit-input','stop-on-loss-input','limit-input','on-win-input','on-loss-input','auto-bet-button'];
@@ -82,7 +82,7 @@
   function clearResume(){try{sessionStorage.removeItem(resumeKey)}catch{}}
   function off(t){endStats('other');state='OFF';reloadWanted=false;runningSeen=false;clearResume();for(const k of fields)field(k).disabled=false;field('toggle').textContent='Bắt đầu Auto';notice(t);}
   function arm(c,expected=''){
-    config=c;identity=expected;state='PREPARE';startedAt=Date.now();lastAction=0;stableAt=0;readyAt=0;runningSeen=false;reloadWanted=false;
+    statsRequestedAt=0;config=c;identity=expected;state='PREPARE';startedAt=Date.now();lastAction=0;stableAt=0;readyAt=0;runningSeen=false;reloadWanted=false;
     reloadAt=c.reload>0?Date.now()+c.reload*60000:0;for(const k of fields)field(k).disabled=true;field('toggle').textContent='Tắt Auto / chạy lại';notice('Đang mở Tự động và Nâng cao…');
   }
   function restore(){let saved;try{saved=JSON.parse(sessionStorage.getItem(resumeKey)||'null')}catch{}clearResume();if(!saved||!valid(saved.config)||Date.now()-saved.time>300000||Date.now()<saved.time||!isLimbo())return;showConfig(saved.config);arm(saved.config,saved.currency);notice('Sau reload: đang kiểm tra game trước khi chạy tiếp…');}
@@ -101,6 +101,17 @@
     input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertReplacementText',data:text}));
     input.dispatchEvent(new Event('change',{bubbles:true}));input.blur();debug('dom.write.output',{testId:input.getAttribute('data-testid'),output:input.value,valid:input.validity?.valid});
   };
+  function ensureLiveStats(){
+    const stats=walletSnapshot().displayedStats;
+    if(stats){if(statsRequestedAt)debug('stats.ready',{stats});statsRequestedAt=0;return true;}
+    const toggle=one('button-liveStats');
+    notice('Đang kiểm tra / mở bảng thống kê trực tuyến trước khi chạy Auto…');
+    // Only open a confirmed inactive toggle, once per preparation. Never reset totals.
+    if(toggle&&!toggle.disabled&&toggle.getAttribute('data-active')==='false'&&!statsRequestedAt){
+      action(()=>{statsRequestedAt=Date.now();debug('stats.open.input',{active:toggle.getAttribute('data-active')});toggle.click();debug('stats.open.output',{active:toggle.getAttribute('data-active'),stats:walletSnapshot().displayedStats})});
+    }
+    return false;
+  }
   function validNative(input){
     if(input.checkValidity())return true;
     const id=input.getAttribute('data-testid'),v=input.validity;
@@ -148,9 +159,10 @@
       state='PREPARE';startedAt=Date.now();stableAt=0;readyAt=0;
     }
     if(state!=='PREPARE')return;
-    if(Date.now()-startedAt>30000)return off('Không xác nhận được cấu hình trong 30 giây; tool đã tắt.');
+    if(Date.now()-startedAt>30000)return off(walletSnapshot().displayedStats?'Không xác nhận được cấu hình trong 30 giây; tool đã tắt.':'Không xác nhận được bảng thống kê trong 30 giây; tool chưa bắt đầu Auto.');
     if(!button){const auto=one('auto-tab');if(auto&&!auto.disabled)action(()=>auto.click());return;}
     if(!idle||button.disabled)return;
+    if(!ensureLiveStats())return;
     const advanced=[...document.querySelectorAll('input[data-testid^="advanced-toggle-status-"]')].filter(visible);
     if(advanced.length!==1)return;
     if(!advanced[0].checked){action(()=>advanced[0].click());return;}
@@ -173,6 +185,8 @@
     if(reloadWanted&&runningSeen)return reload();
     const finalAmount=one('input-game-amount');
     if(!finalAmount||money(finalAmount.value)!==config.amount)return off('Tiền cược không khớp chính xác; không bắt đầu.');
+    if(!ensureLiveStats())return;
+    debug('stats.preflight.confirmed',{stats:walletSnapshot().displayedStats});publishHistory();
     startStats();state='WAIT_START';startedAt=Date.now();stableAt=0;readyAt=0;cycles++;notice(`Đã kiểm tra mức bắt đầu ${config.amount.toFixed(8)} · đang bắt đầu Auto…`);debug('auto.start.input',{snapshot:debugSnapshot()},'info',statCycle);button.click();debug('auto.start.output',{snapshot:debugSnapshot()},'info',statCycle);
   },250);
   if(typeof chrome!=='undefined'&&chrome.runtime?.onMessage)chrome.runtime.onMessage.addListener((m,_s,reply)=>{
