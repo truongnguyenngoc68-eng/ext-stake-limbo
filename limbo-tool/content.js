@@ -49,10 +49,10 @@
   <div class="pair"><label>Khi thua<select id="lossMode"><option value="increase">Tăng %</option><option value="reset">Cài đặt lại</option></select></label><label>Tăng khi thua %<input id="loss" type="number" min="0" step="0.01" value="14"></label></div>
   <label>Tự reload sau bao nhiêu phút (0 = tắt)<input id="reload" type="number" min="0" step="1" value="0"></label>
   <p>Reload chờ lượt Auto hoàn thành. Sau reload tự mở Tự động/Nâng cao, kiểm tra cấu hình rồi chạy tiếp.</p>
-  </div><button id="toggle">Bắt đầu Auto</button><output>Đang tắt</output><div class="body" id="extra"><button id="reloadNow">Reload khi lượt hoàn thành</button><button id="telegram">Telegram & Lịch sử</button><p>Tool áp dụng toàn bộ cấu hình trên khi bắt đầu và mỗi lần chạy lại. Bấm Dừng trên game sẽ tắt tool.</p></div></section>`;
+  </div><button id="toggle">Bắt đầu Auto</button><output>Đang tắt</output><div class="body" id="extra"><button id="reloadNow">Reload khi lượt hoàn thành</button><button id="telegram">Telegram & Lịch sử</button><p>Tool áp dụng toàn bộ cấu hình ở lần đầu. Khi game tự hoàn thành và hiện Bắt đầu cược, tool chỉ đặt lại tiền cược rồi chạy tiếp. Bấm Dừng trên game sẽ tắt tool.</p></div></section>`;
   document.documentElement.append(host);
   const field=id=>root.querySelector('#'+id),status=root.querySelector('output');
-  let state='OFF',config=null,startedAt=0,lastAction=0,stableAt=0,readyAt=0,runningSeen=false,cycles=0,identity='',reloadAt=0,reloadWanted=false,initialReady=true,statsRequestedAt=0;
+  let state='OFF',config=null,startedAt=0,lastAction=0,stableAt=0,idleAt=0,readyAt=0,runningSeen=false,restartOnly=false,cycles=0,identity='',reloadAt=0,reloadWanted=false,initialReady=true,statsRequestedAt=0;
   const debug=(event,data={},level='info',trace)=>globalThis.LimboLog?.emit(event,data,level,trace);
   function nativeAuto(){
     const buttons=[...document.querySelectorAll('[data-testid="auto-bet-button"]')].filter(visible);
@@ -85,7 +85,7 @@
   }
   function debugSnapshot(){
     const ids=['input-game-amount','target-multiplier','stop-on-profit-input','stop-on-loss-input','limit-input','on-win-input','on-loss-input','auto-bet-button'];
-    return {native:nativeAuto(),diagnostics:diagnosticChecks(),alerts:[...document.querySelectorAll('[role="alert"]')].filter(visible).map(e=>e.textContent.slice(0,1000)),visibility:document.visibilityState,state,config,cycles,identity,reloadWanted,reloadAt,statCycle,startedAt,lastAction,stableAt,readyAt,runningSeen,initialReady,status:status.textContent,wallet:walletSnapshot(),seeds:[...document.querySelectorAll('[data-testid*="seed" i]')].filter(visible).slice(0,30).map(e=>({id:e.getAttribute('data-testid'),value:e.value??e.textContent?.slice(0,2000)})),game:Object.fromEntries(ids.map(id=>{const e=one(id);return [id,e?{value:e.value,text:e.tagName==='BUTTON'?e.textContent:undefined,disabled:e.disabled,autoStatus:e.getAttribute('data-autobet-status'),valid:e.validity?{valid:e.validity.valid,stepMismatch:e.validity.stepMismatch,rangeUnderflow:e.validity.rangeUnderflow,rangeOverflow:e.validity.rangeOverflow}:null}:null]}))};
+    return {native:nativeAuto(),diagnostics:diagnosticChecks(),alerts:[...document.querySelectorAll('[role="alert"]')].filter(visible).map(e=>e.textContent.slice(0,1000)),visibility:document.visibilityState,state,config,cycles,identity,reloadWanted,reloadAt,statCycle,startedAt,lastAction,stableAt,idleAt,readyAt,runningSeen,restartOnly,initialReady,status:status.textContent,wallet:walletSnapshot(),seeds:[...document.querySelectorAll('[data-testid*="seed" i]')].filter(visible).slice(0,30).map(e=>({id:e.getAttribute('data-testid'),value:e.value??e.textContent?.slice(0,2000)})),game:Object.fromEntries(ids.map(id=>{const e=one(id);return [id,e?{value:e.value,text:e.tagName==='BUTTON'?e.textContent:undefined,disabled:e.disabled,autoStatus:e.getAttribute('data-autobet-status'),valid:e.validity?{valid:e.validity.valid,stepMismatch:e.validity.stepMismatch,rangeUnderflow:e.validity.rangeUnderflow,rangeOverflow:e.validity.rangeOverflow}:null}:null]}))};
   }
   globalThis.LimboLog?.setSnapshot(debugSnapshot);
   const notice=t=>{const changed=status.textContent!==t;status.textContent=t;if(changed)debug('state.notice',{output:t,snapshot:debugSnapshot()},/lỗi|không xác nhận|không hợp lệ|không đúng|không khớp|mất trạng thái/i.test(t)?'error':'info')};
@@ -109,14 +109,14 @@
   field('amount').addEventListener('input',preview);
   if(typeof chrome!=='undefined'&&chrome.storage?.local){initialReady=false;chrome.storage.local.get(storageKey).then(s=>{if(s[storageKey]&&valid(s[storageKey]))showConfig(s[storageKey]);}).catch(error=>debug('config.load.error',{error},'error')).finally(()=>{initialReady=true;restore()});}
   function clearResume(){try{sessionStorage.removeItem(resumeKey)}catch{}}
-  function off(t){const trace=crypto.randomUUID();debug('tool.stop',{reason:t,before:debugSnapshot(),diagnostics:diagnosticChecks()},'error',trace);endStats('other');state='OFF';reloadWanted=false;runningSeen=false;clearResume();for(const k of fields)field(k).disabled=false;field('toggle').textContent='Bắt đầu Auto';notice(t);debug('tool.stopped',{reason:t,after:debugSnapshot()},'info',trace);}
+  function off(t){const trace=crypto.randomUUID();debug('tool.stop',{reason:t,before:debugSnapshot(),diagnostics:diagnosticChecks()},'error',trace);endStats('other');state='OFF';reloadWanted=false;runningSeen=false;restartOnly=false;clearResume();for(const k of fields)field(k).disabled=false;field('toggle').textContent='Bắt đầu Auto';notice(t);debug('tool.stopped',{reason:t,after:debugSnapshot()},'info',trace);}
   function arm(c,expected=''){
-    statsRequestedAt=0;config=c;identity=expected;state='PREPARE';startedAt=Date.now();lastAction=0;stableAt=0;readyAt=0;runningSeen=false;reloadWanted=false;
+    statsRequestedAt=0;config=c;identity=expected;state='PREPARE';startedAt=Date.now();lastAction=0;stableAt=0;idleAt=0;readyAt=0;runningSeen=false;restartOnly=false;reloadWanted=false;
     reloadAt=c.reload>0?Date.now()+c.reload*60000:0;for(const k of fields)field(k).disabled=true;field('toggle').textContent='Tắt Auto / chạy lại';notice('Đang mở Tự động và Nâng cao…');
   }
   function restore(){let saved;try{saved=JSON.parse(sessionStorage.getItem(resumeKey)||'null')}catch{}clearResume();if(!saved||!valid(saved.config)||Date.now()-saved.time>300000||Date.now()<saved.time||!isLimbo())return;showConfig(saved.config);arm(saved.config,saved.currency);notice('Sau reload: đang kiểm tra game trước khi chạy tiếp…');}
   if(initialReady)restore();
-  field('toggle').onclick=()=>{if(state==='STOPPING')return notice('Đang yêu cầu dừng game do TP/SL không đúng; chờ xác nhận.');if(state!=='OFF')return off('Đã tắt tool; lượt đang chạy trên game vẫn tiếp tục.');if(!initialReady)return notice('Đang tải cấu hình…');const c=readConfig();if(!valid(c))return notice('Tiền cược phải > 0 và ≤ SL; TP/SL phải > 0. Kiểm tra mục tiêu, %, số cược và reload.');if(!isLimbo())return notice('Mở trang Limbo trước.');if(one('auto-bet-button')&&nativeAuto().state!=='IDLE')return notice('Chưa thể bật tool: game đang chạy hoặc chưa xác nhận dừng. Chờ / dừng Auto trên game rồi bật lại.');saveConfig();cycles=0;arm(c);};
+  field('toggle').onclick=()=>{if(state!=='OFF')return off('Đã tắt tool; lượt đang chạy trên game vẫn tiếp tục.');if(!initialReady)return notice('Đang tải cấu hình…');const c=readConfig();if(!valid(c))return notice('Tiền cược phải > 0 và ≤ SL; TP/SL phải > 0. Kiểm tra mục tiêu, %, số cược và reload.');if(!isLimbo())return notice('Mở trang Limbo trước.');if(one('auto-bet-button')&&nativeAuto().state!=='IDLE')return notice('Chưa thể bật tool: game đang chạy hoặc chưa xác nhận dừng. Chờ Auto hoàn thành rồi bật lại.');saveConfig();cycles=0;arm(c);};
   field('collapse').onclick=()=>{const hidden=!field('extra').hidden;for(const e of root.querySelectorAll('.body'))e.hidden=hidden;field('collapse').textContent=hidden?'Mở rộng':'Thu gọn'};
   field('telegram').onclick=()=>chrome.runtime.sendMessage({type:'open-options'});
   field('reloadNow').onclick=()=>{if(state==='OFF')return notice('Bật Auto trước khi hẹn reload.');reloadWanted=true;notice('Đã hẹn reload khi lượt hoàn thành.');};
@@ -163,36 +163,36 @@
     const native=nativeAuto();
     const running=native.state==='RUNNING';
     const idle=native.state==='IDLE';
-    if(state==='STOPPING'){
-      if(idle&&!button.disabled)return off('Đã dừng game do cấu hình TP/SL không còn đúng.');
-      if(running&&!button.disabled)action(()=>button.click());
-      notice('TP/SL không đúng · đang yêu cầu dừng game; chưa xác nhận dừng.');return;
-    }
-    if(running){
-      const tp=one('stop-on-profit-input'),sl=one('stop-on-loss-input');
-      if(!tp||!sl||!Number.isFinite(numeric(sl.value))||numeric(sl.value)<=0||Math.abs(numeric(sl.value)-config.sl)>1e-10||!Number.isFinite(numeric(tp.value))||numeric(tp.value)<=0||Math.abs(numeric(tp.value)-config.tp)>1e-10){
-        state='STOPPING';clearResume();reloadWanted=false;notice('Phát hiện TP/SL không đúng · yêu cầu dừng game.');
-        if(!button.disabled)action(()=>button.click());return;
-      }
-    }
-    if(running){state='RUNNING';runningSeen=true;stableAt=0;notice(`Auto đang chạy · đã bắt đầu ${cycles} lượt${reloadWanted?' · chờ hoàn thành để reload':''}`);return;}
+    if(running){state='RUNNING';runningSeen=true;stableAt=0;idleAt=0;notice(`Auto đang chạy · đã bắt đầu ${cycles} lượt${reloadWanted?' · chờ hoàn thành để reload':''}`);return;}
     if(state==='WAIT_START'){if(Date.now()-startedAt>10000)return off('Không xác nhận được Auto bắt đầu; không bấm lại.');return;}
     if(state==='RUNNING'){
       if(!idle||button.disabled){if(!stableAt)stableAt=Date.now();if(Date.now()-stableAt>30000)off('Mất trạng thái game; tool đã tắt.');return;}
-      debug('native.idle.detected',{reason:'unconfirmed',snapshot:debugSnapshot(),diagnostics:diagnosticChecks()},'warn',statCycle);state='WAIT_IDLE';stableAt=Date.now();notice('Lượt hoàn thành · chờ 2 giây');return;
+      debug('native.idle.detected',{reason:'ui-returned-to-start',snapshot:debugSnapshot(),diagnostics:diagnosticChecks()},'info',statCycle);state='WAIT_IDLE';idleAt=Date.now();notice('Lệnh Auto đã hoàn thành · chờ nút Bắt đầu ổn định…');return;
     }
     if(state==='WAIT_IDLE'){
-      if(!idle||button.disabled){stableAt=Date.now();return;}
-      if(Date.now()-stableAt<2000)return;
+      if(!idle||button.disabled){idleAt=0;return;}
+      if(!idleAt)idleAt=Date.now();
+      if(Date.now()-idleAt<2000)return;
       endStats('complete');
       if(reloadWanted&&runningSeen)return reload();
-      state='PREPARE';startedAt=Date.now();stableAt=0;readyAt=0;
+      restartOnly=true;state='PREPARE';startedAt=Date.now();stableAt=0;idleAt=0;readyAt=0;statsRequestedAt=0;
     }
     if(state!=='PREPARE')return;
     if(Date.now()-startedAt>30000)return off(walletSnapshot().displayedStats?'Không xác nhận được cấu hình trong 30 giây; tool đã tắt.':'Không xác nhận được bảng thống kê trong 30 giây; tool chưa bắt đầu Auto.');
     if(!button){const auto=one('auto-tab');if(auto&&!auto.disabled)action(()=>auto.click());return;}
     if(!idle||button.disabled)return;
     if(!ensureLiveStats())return;
+    if(restartOnly){
+      const restartAmount=one('input-game-amount');
+      if(!restartAmount||restartAmount.disabled||!identity)return;
+      if(money(restartAmount.value)!==config.amount){action(()=>write(restartAmount,config.amount));return;}
+      if(!validNative(restartAmount))return off(`Tiền cược không hợp lệ: ${restartAmount.value}. Tool chưa bắt đầu lại.`);
+      if(!readyAt){readyAt=Date.now();return;}
+      if(Date.now()-readyAt<1000)return;
+      if(!ensureLiveStats())return;
+      debug('stats.preflight.confirmed',{stats:walletSnapshot().displayedStats,restartOnly:true});publishHistory();
+      startStats();state='WAIT_START';startedAt=Date.now();stableAt=0;readyAt=0;cycles++;notice(`Đã reset tiền cược ${config.amount.toFixed(8)} · đang bắt đầu Auto…`);debug('auto.restart.input',{snapshot:debugSnapshot()},'info',statCycle);button.click();debug('auto.restart.output',{snapshot:debugSnapshot()},'info',statCycle);return;
+    }
     const advanced=[...document.querySelectorAll('input[data-testid^="advanced-toggle-status-"]')].filter(visible);
     if(advanced.length!==1)return;
     if(!advanced[0].checked){action(()=>advanced[0].click());return;}
@@ -216,7 +216,7 @@
     const finalAmount=one('input-game-amount');
     if(!finalAmount||money(finalAmount.value)!==config.amount)return off('Tiền cược không khớp chính xác; không bắt đầu.');
     if(!ensureLiveStats())return;
-    debug('stats.preflight.confirmed',{stats:walletSnapshot().displayedStats});publishHistory();
+    debug('stats.preflight.confirmed',{stats:walletSnapshot().displayedStats,restartOnly:false});publishHistory();
     startStats();state='WAIT_START';startedAt=Date.now();stableAt=0;readyAt=0;cycles++;notice(`Đã kiểm tra mức bắt đầu ${config.amount.toFixed(8)} · đang bắt đầu Auto…`);debug('auto.start.input',{snapshot:debugSnapshot()},'info',statCycle);button.click();debug('auto.start.output',{snapshot:debugSnapshot()},'info',statCycle);
   },250);
   if(typeof chrome!=='undefined'&&chrome.runtime?.onMessage)chrome.runtime.onMessage.addListener((m,_s,reply)=>{

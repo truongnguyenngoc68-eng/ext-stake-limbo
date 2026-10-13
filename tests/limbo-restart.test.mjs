@@ -29,12 +29,11 @@ function fixture({manual=false,advanced=false,resume=null,remote=false,logging=f
  return {logs,dom,w,one,button,input,panel,submissions,stops,running,complete,remote:m=>{let result;for(const fn of listeners)fn(m,{},r=>{result=r});return result},click:()=>panel.querySelector('#toggle').click(),advance:(ms=250)=>{time+=ms;tick()},pump:(steps=100)=>{for(let i=0;i<steps;i++){time+=250;tick()}},until:(n)=>{for(let i=0;i<130&&submissions.length<n;i++){time+=250;tick()}},manualStop:()=>{manualListener({isTrusted:true,target:button});button.click()},field:(id,v)=>{panel.querySelector('#'+id).value=v},status:()=>panel.querySelector('output').textContent};
 }
 const verify=s=>{assert.equal(s.amount,.001);assert.equal(s.tp,1.1);assert.equal(s.sl,1);assert.equal(s.target,9);assert.equal(s.winReset,true);assert.equal(s.lossReset,false);assert.equal(s.loss,14)};
-for(const count of [1,2,3,5,10])for(const scenario of ['TP','SL','wrongTP','wrongSL','blank','disabled','rejected'])test(`Auto verification ${scenario} over ${count} rounds`,()=>{
+for(const count of [1,2,3,5,10])for(const scenario of ['raised','lowered','blank','disabled','rejected'])test(`Stake-only restart ${scenario} over ${count} rounds`,()=>{
  const f=fixture({manual:true});try{
   f.click();f.until(1);assert.equal(f.submissions.length,1);verify(f.submissions[0]);f.advance();
   for(let i=0;i<count;i++){
-   const before=f.submissions.length;f.complete();f.input.value=scenario==='SL'?'0.18888377':scenario==='blank'?'':'.001';
-   if(scenario==='wrongTP')f.one('stop-on-profit-input').value='0';if(scenario==='wrongSL')f.one('stop-on-loss-input').value='0';
+   const before=f.submissions.length;f.complete();f.input.value=scenario==='raised'?'0.18888377':scenario==='lowered'?'0.00000001':scenario==='blank'?'':'.001';
    if(scenario==='rejected'){f.input.value='.2';f.input.addEventListener('input',()=>{f.input.value='.2'})}
    if(scenario==='disabled'){f.button.disabled=true;f.pump(10);assert.equal(f.submissions.length,before);f.button.disabled=false}
    if(scenario==='rejected'){f.pump(150);assert.equal(f.submissions.length,before);assert.match(f.status(),/30 giây/);break}
@@ -48,16 +47,16 @@ const checks=[
  ['Stake greater than SL blocks Auto',f=>{f.field('amount','2');f.click();f.pump();assert.equal(f.submissions.length,0)}],
  ['Missing SL blocks Auto',f=>{f.one('stop-on-loss-input').remove();f.click();f.pump(150);assert.equal(f.submissions.length,0)}],
  ['Rejected SL blocks Auto',f=>{f.one('stop-on-loss-input').addEventListener('input',e=>e.target.value='0');f.click();f.pump(150);assert.equal(f.submissions.length,0)}],
- ['SL zero during run stops native game',f=>{f.click();f.until(1);f.advance();f.one('stop-on-loss-input').value='0';f.pump(8);assert.equal(f.stops.length,1);assert.equal(f.submissions.length,1)}],
- ['SL changed during run stops native game',f=>{f.click();f.until(1);f.advance();f.one('stop-on-loss-input').value='10';f.pump(8);assert.equal(f.stops.length,1)}],
- ['Missing SL during run stops native game',f=>{f.click();f.until(1);f.advance();f.one('stop-on-loss-input').remove();f.pump(8);assert.equal(f.stops.length,1)}],
+ ['SL zero during run never clicks native Stop',f=>{f.click();f.until(1);f.advance();f.one('stop-on-loss-input').value='0';f.pump(8);assert.equal(f.stops.length,0);assert.equal(f.submissions.length,1);assert.equal(f.button.getAttribute('data-autobet-status'),'stop')}],
+ ['SL changed during run never clicks native Stop',f=>{f.click();f.until(1);f.advance();f.one('stop-on-loss-input').value='10';f.pump(8);assert.equal(f.stops.length,0);assert.equal(f.button.getAttribute('data-autobet-status'),'stop')}],
+ ['Missing SL during run never clicks native Stop',f=>{f.click();f.until(1);f.advance();f.one('stop-on-loss-input').remove();f.pump(8);assert.equal(f.stops.length,0);assert.equal(f.button.getAttribute('data-autobet-status'),'stop')}],
  ['Manual Stop never restarts',f=>{f.click();f.until(1);f.advance();f.manualStop();f.pump(150);assert.equal(f.submissions.length,1)}],
  ['No repeated start when acceptance is unknown',f=>{f.button.onclick=()=>{f.submissions.push({})};f.click();f.until(1);f.pump(50);assert.equal(f.submissions.length,1);assert.match(f.status(),/Không xác nhận/)}],
  ['Switch currency aborts before start',f=>{f.click();f.advance();f.input.setAttribute('data-bet-amount-active-currency','btc');f.pump();assert.equal(f.submissions.length,0)}],
  ['Error toast blocks Auto',f=>{const e=f.w.document.createElement('div');e.setAttribute('role','alert');e.textContent='Không đủ tiền';f.w.document.body.append(e);f.click();f.pump();assert.equal(f.submissions.length,0)}],
  ['Success toast allows Auto',f=>{const e=f.w.document.createElement('div');e.setAttribute('role','alert');e.textContent='Tự động cược đã bắt đầu';f.w.document.body.append(e);f.click();f.until(1);assert.equal(f.submissions.length,1)}],
  ['Reload waits for completion and saves resume marker',f=>{f.click();f.until(1);f.advance();f.panel.querySelector('#reloadNow').click();f.pump(12);assert.equal(f.w.sessionStorage.getItem('limbo-auto-reload-v2'),null);f.complete();f.pump(12);const saved=JSON.parse(f.w.sessionStorage.getItem('limbo-auto-reload-v2'));assert.equal(saved.config.sl,1);assert.equal(saved.currency,'usdt');assert.equal(f.submissions.length,1)}],
- ['Fifty consecutive TP/SL cycles keep verified limits',f=>{f.click();f.until(1);f.advance();for(let i=0;i<50;i++){f.complete();f.input.value=i%2?'.188':'0.001';f.one('stop-on-profit-input').value='0';f.one('stop-on-loss-input').value='0';f.until(i+2);assert.equal(f.submissions.length,i+2);verify(f.submissions.at(-1));f.advance()}}]
+ ['Fifty completed native cycles reset only the stake',f=>{f.click();f.until(1);f.advance();for(let i=0;i<50;i++){f.complete();f.input.value=i%2?'.188':'0.00000001';f.until(i+2);assert.equal(f.submissions.length,i+2);verify(f.submissions.at(-1));assert.equal(f.stops.length,0);f.advance()}}]
 ];
 for(const [name,check]of checks)test(name,()=>{const f=fixture({manual:true});try{check(f)}finally{f.dom.window.close()}});
 const savedConfig={amount:.001,tp:1.1,sl:1,target:9,limit:0,winMode:'reset',win:0,lossMode:'increase',loss:14,reload:0};
@@ -68,7 +67,7 @@ test('Expired reload marker cannot start bets',()=>{const f=fixture({resume:{con
 test('Reload marker cannot resume with another currency',()=>{const f=fixture({resume:{config:savedConfig,currency:'btc',time:1000}});try{f.pump();assert.equal(f.submissions.length,0);assert.match(f.status(),/loại tiền/)}finally{f.dom.window.close()}});
 test('Reload marker with zero SL cannot start',()=>{const f=fixture({resume:{config:{...savedConfig,sl:0},currency:'usdt',time:1000}});try{f.pump();assert.equal(f.submissions.length,0)}finally{f.dom.window.close()}});
 test('Increase on win and reset on loss are applied independently',()=>{const f=fixture();try{f.field('winMode','increase');f.field('win','2.5');f.field('lossMode','reset');f.click();f.until(1);assert.equal(f.submissions.length,1,f.status()+JSON.stringify([...f.panel.querySelectorAll('input,select')].map(e=>[e.id,e.value])));assert.equal(f.one('on-win-input').disabled,false);assert.equal(Number(f.one('on-win-input').value),2.5);assert.equal(f.submissions[0].lossReset,true)}finally{f.dom.window.close()}});
-test('Stop request retries when game button was temporarily disabled',()=>{const f=fixture();try{f.click();f.until(1);f.advance();f.button.disabled=true;f.one('stop-on-loss-input').value='0';f.pump(4);assert.equal(f.stops.length,0);f.click();f.button.disabled=false;f.pump(8);assert.equal(f.stops.length,1);assert.equal(f.submissions.length,1)}finally{f.dom.window.close()}});
+test('A temporarily disabled running button is observed and never clicked',()=>{const f=fixture();try{f.click();f.until(1);f.advance();f.button.disabled=true;f.one('stop-on-loss-input').value='0';f.pump(12);assert.equal(f.stops.length,0);assert.equal(f.submissions.length,1);f.button.disabled=false;f.pump(8);assert.equal(f.stops.length,0)}finally{f.dom.window.close()}});
 test('No overlay is displayed on the game',()=>{const f=fixture();try{assert.equal(f.w.document.querySelector('#limbo-restart-tool').style.display,'none')}finally{f.dom.window.close()}});
 test('Duplicate script cannot create a second controller',()=>{const f=fixture();try{f.w.eval(code);assert.equal(f.w.document.querySelectorAll('#limbo-restart-tool').length,1)}finally{f.dom.window.close()}});
 
@@ -171,7 +170,21 @@ test('Each restart rechecks statistics and reopens a panel closed between cycles
 });
 
 for(let i=0;i<50;i++)test('Stop diagnostics capture failed gate '+(i+1),()=>{const f=fixture({logging:true,advanced:true});try{const id=['stop-on-loss-input','stop-on-profit-input','on-loss-input','limit-input','target-multiplier'][i%5];f.one(id).remove();f.click();f.pump(150);const stop=f.logs.find(e=>e.event==='tool.stop');assert.ok(stop);assert.equal(stop.data.before.state,'PREPARE');assert.equal(stop.level,'error');assert.ok(stop.data.diagnostics.failed.some(c=>c.code.includes(id)||id==='on-loss-input'&&c.code==='mode.loss'));const after=f.logs.find(e=>e.event==='tool.stopped');assert.equal(after.data.after.state,'OFF');assert.equal(after.trace,stop.trace);assert.equal(f.submissions.length,0);}finally{f.dom.window.close()}});
-test('Native idle logs unknown reason without claiming TP or SL',()=>{const f=fixture({logging:true});try{f.click();f.until(1);f.advance();f.complete();f.advance();const log=f.logs.find(e=>e.event==='native.idle.detected');assert.ok(log);assert.equal(log.data.reason,'unconfirmed');assert.equal(log.data.snapshot.state,'RUNNING');assert.ok(log.data.diagnostics);}finally{f.dom.window.close()}});
+test('Native idle logs the authoritative UI transition',()=>{const f=fixture({logging:true});try{f.click();f.until(1);f.advance();f.complete();f.advance();const log=f.logs.find(e=>e.event==='native.idle.detected');assert.ok(log);assert.equal(log.data.reason,'ui-returned-to-start');assert.equal(log.data.snapshot.state,'RUNNING');assert.ok(log.data.diagnostics);}finally{f.dom.window.close()}});
+
+test('Returning to Start resets the stake and restarts without a profit gate',()=>{
+ const f=fixture({logging:true});try{
+  f.click();f.until(1);f.advance();f.input.value='0.18888888';f.complete();f.until(2);
+  assert.equal(f.submissions.length,2);assert.equal(f.submissions[1].amount,.001);assert.equal(f.stops.length,0);
+  assert.ok(f.logs.find(e=>e.event==='auto.restart.input'));
+ }finally{f.dom.window.close()}
+});
+test('Restart writes only the stake and preserves native Auto settings',()=>{
+ const f=fixture();try{
+  f.click();f.until(1);f.advance();f.input.value='0.2';f.one('stop-on-profit-input').value='7';f.one('stop-on-loss-input').value='8';f.one('target-multiplier').value='12';f.one('limit-input').value='23';f.complete();f.until(2);
+  assert.deepEqual(f.submissions[1],{amount:.001,tp:7,sl:8,target:12,loss:14,winReset:true,lossReset:false});assert.equal(f.stops.length,0);
+ }finally{f.dom.window.close()}
+});
 
 test('Monitor and panel report native Auto running separately after the tool is turned off',()=>{
  const f=fixture({remote:true});try{

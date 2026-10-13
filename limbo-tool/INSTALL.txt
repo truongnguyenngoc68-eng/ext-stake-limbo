@@ -24,6 +24,10 @@ Trước mỗi lần bắt đầu Auto, tool kiểm tra bảng thống kê trự
 
 Monitor hiển thị riêng trạng thái Auto thật trên game và trạng thái điều khiển của tool. Vì vậy “Game đang chạy · Tool đã tắt” nghĩa là lượt native vẫn tiếp tục nhưng tool không tự chạy lượt kế tiếp. Nếu tab còn dùng observer phiên bản cũ, Monitor yêu cầu F5 tab để đồng bộ.
 
+Trong lúc Auto native đang chạy, tool chỉ quan sát và tuyệt đối không bấm Dừng. Khi nút native đã chuyển ổn định về “Bắt đầu cược”, tool chỉ đưa tiền cược về mức ban đầu rồi bấm Bắt đầu; TP/SL, mục tiêu, giới hạn và chế độ thắng/thua không bị ghi lại giữa chu kỳ.
+
 Build Limbo: npm run build:limbo (giữ version), hoặc npm run release:limbo (tăng patch). Hai lệnh đều chạy test, đóng gói vào outputs, tự sao lưu và cập nhật thư mục Chrome đang nạp: C:\Users\truon\Downloads\limbo-tool-v1.3.0\limbo-tool. Sau build, chủ động reload extension khi không ảnh hưởng phiên đang chạy.
+
+1.5.7 NATIVE START ONLY: Tool không còn nhánh chủ động bấm Dừng. Trong khi Auto chạy, thay đổi hoặc mất tạm thời DOM TP/SL cũng không dừng game. Tool chỉ chạy lại sau khi nút native ổn định ở “Bắt đầu cược”, và chỉ ghi lại tiền cược ban đầu trước khi bấm Bắt đầu.
 
 1.5.6 PANEL RECONNECT: Khi panel mat receiver, tu thu nap lai bo nhan vao dung tab roi xac nhan co phan hoi. Moi tab toi da 1 lan / 15 giay. Neu chua ket noi, panel khoa control va hien trang thai; khong replay lenh bam cu. Khong can F5 trang trong truong hop ket noi lai thanh cong. Khi reload tien ich, co the can dong/mo panel neu Chrome vo hieu hoa chinh trang panel. De cap nhat: dung game, ghi de thu muc tien ich cu, Reload tien ich trong Chrome; kiem tra header 1.5.6.

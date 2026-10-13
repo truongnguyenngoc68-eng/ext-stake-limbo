@@ -1,6 +1,6 @@
 let monitorBusy=false;
 const monitorCards=document.getElementById('monitorCards'),monitorCount=document.getElementById('monitorCount');
-const stateNames={OFF:'Tool đã tắt',PREPARE:'Chuẩn bị',WAIT_START:'Chờ xác nhận',RUNNING:'Đang chạy',WAIT_IDLE:'Chờ chạy lại',STOPPING:'Đang dừng',RELOADING:'Đang reload'};
+const stateNames={OFF:'Tool đã tắt',PREPARE:'Chuẩn bị',WAIT_START:'Chờ xác nhận',RUNNING:'Đang chạy',WAIT_IDLE:'Chờ chạy lại',RELOADING:'Đang reload'};
 function node(tag,text,className){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(className)e.className=className;return e;}
 function monitorCard(tab,data){
  const card=node('article',undefined,'tab-card');

@@ -13,3 +13,4 @@
 
 - Before every native Auto start (including restarted cycles and reload resume), confirm that the live statistics profit/volume fields are visible and readable. If closed, open the exact `button-liveStats` toggle once and wait for data. Never press reset or toggle an already active statistics panel off.
 - Missing, ambiguous or unreadable statistics must block the start and produce a diagnostic timeout. Keep this preflight covered by regression tests when modifying Auto preparation.
+- While native Auto is running, the tool must only observe it and must never click the native Stop button. After the native button remains in the exact idle `Start Autobet` state for two seconds, treat the command as completed, reset only the stake amount, and click Start. Do not rewrite TP/SL, target, limit, or win/loss modes between cycles.
