@@ -150,6 +150,16 @@
       Number.isFinite(numeric(input.value))&&numeric(input.value)>=0&&
       !['badInput','customError','patternMismatch','rangeOverflow','rangeUnderflow','tooLong','tooShort','typeMismatch','valueMissing'].some(k=>v[k]);
   }
+  function pressStart(button,source){
+    const native=nativeAuto();
+    const allowed=button===one('auto-bet-button')&&!button.disabled&&native.state==='IDLE'&&native.attribute==='start'&&/Bắt Đầu Cược Tự Động|Start Autobet/i.test(native.text);
+    if(!allowed){readyAt=0;debug('auto.start.blocked',{source,native,snapshot:debugSnapshot()},'warn');notice('Nút chưa ở trạng thái Bắt đầu cược · tool không click.');return false;}
+    startStats();state='WAIT_START';startedAt=Date.now();stableAt=0;readyAt=0;cycles++;
+    notice(`${source==='restart'?`Đã reset tiền cược ${config.amount.toFixed(8)}`:`Đã kiểm tra mức bắt đầu ${config.amount.toFixed(8)}`} · đang bắt đầu Auto…`);
+    debug(`auto.${source}.input`,{permission:'start-only',native,snapshot:debugSnapshot()},'info',statCycle);
+    button.click();
+    debug(`auto.${source}.output`,{snapshot:debugSnapshot()},'info',statCycle);return true;
+  }
   function reload(){try{sessionStorage.setItem(resumeKey,JSON.stringify({config,currency:identity,time:Date.now()}));state='RELOADING';notice('Đang tải lại trang…');location.reload();}catch(error){debug('reload.error',{error},'error');off('Không lưu được trạng thái reload; tool đã tắt.');}}
   setInterval(()=>{
     if(state==='OFF'||state==='RELOADING')return;
@@ -191,7 +201,7 @@
       if(Date.now()-readyAt<1000)return;
       if(!ensureLiveStats())return;
       debug('stats.preflight.confirmed',{stats:walletSnapshot().displayedStats,restartOnly:true});publishHistory();
-      startStats();state='WAIT_START';startedAt=Date.now();stableAt=0;readyAt=0;cycles++;notice(`Đã reset tiền cược ${config.amount.toFixed(8)} · đang bắt đầu Auto…`);debug('auto.restart.input',{snapshot:debugSnapshot()},'info',statCycle);button.click();debug('auto.restart.output',{snapshot:debugSnapshot()},'info',statCycle);return;
+      pressStart(button,'restart');return;
     }
     const advanced=[...document.querySelectorAll('input[data-testid^="advanced-toggle-status-"]')].filter(visible);
     if(advanced.length!==1)return;
@@ -217,7 +227,7 @@
     if(!finalAmount||money(finalAmount.value)!==config.amount)return off('Tiền cược không khớp chính xác; không bắt đầu.');
     if(!ensureLiveStats())return;
     debug('stats.preflight.confirmed',{stats:walletSnapshot().displayedStats,restartOnly:false});publishHistory();
-    startStats();state='WAIT_START';startedAt=Date.now();stableAt=0;readyAt=0;cycles++;notice(`Đã kiểm tra mức bắt đầu ${config.amount.toFixed(8)} · đang bắt đầu Auto…`);debug('auto.start.input',{snapshot:debugSnapshot()},'info',statCycle);button.click();debug('auto.start.output',{snapshot:debugSnapshot()},'info',statCycle);
+    pressStart(button,'start');
   },250);
   if(typeof chrome!=='undefined'&&chrome.runtime?.onMessage)chrome.runtime.onMessage.addListener((m,_s,reply)=>{
     if(m.type==='limbo-monitor'){
