@@ -3,7 +3,7 @@
   const timers = new Set(), cleanups = new Set();
   let disposed = false;
   const lifecycle = {
-    version: '1.0.50',
+    version: '1.0.56',
     valid() {
       if (disposed) return false;
       try { if (!chrome.runtime.id) throw Error('Extension context invalidated'); chrome.runtime.getManifest?.(); return true; }

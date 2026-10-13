@@ -1,0 +1,60 @@
+LIMBO AUTO 1.2.0 — PANEL BÊN PHẢI
+
+CÀI / CẬP NHẬT
+1. Giải nén limbo-tool-v1.2.0.zip.
+2. Mở chrome://extensions, bật Chế độ nhà phát triển, Load unpacked thư mục limbo-tool.
+3. Nếu đã cài bản cũ: thay các file trong đúng thư mục cũ, bấm Reload tiện ích.
+   Không chạy hai bản Limbo Auto cùng lúc. Giữ cùng thư mục để giữ cấu hình Telegram.
+4. F5 các tab Limbo. Bấm biểu tượng Limbo Auto để mở panel bên phải.
+5. Chọn đúng tab Limbo trong danh sách trên panel.
+
+DÙNG AUTO
+Mặc định: tiền cược 0.001, TP 1.1, SL 1, mục tiêu x9, số cược 0 (không giới hạn),
+khi thắng Cài đặt lại, khi thua Tăng 14%. Bạn chỉnh lại trên panel theo ý mình.
+Bấm Bắt đầu Auto: tool tự mở Tự động, bật Nâng cao, áp dụng toàn bộ cấu hình,
+đọc lại giá trị và chờ ổn định trước khi bấm bắt đầu cả lượt đầu.
+Sau mỗi lượt hoàn thành, chờ 2 giây rồi kiểm tra/cài lại toàn bộ cấu hình và bắt đầu tiếp.
+Đóng panel không dừng tool. Bấm Dừng trên game sẽ tắt tool.
+Bấm Tắt Auto trên panel chỉ tắt tool; lượt Auto đang chạy trên game vẫn tiếp tục với TP/SL của sàn.
+
+KIỂM TRA SL
+TP và SL phải > 0; tiền cược ban đầu không được lớn hơn SL.
+Thiếu ô SL, SL không giữ giá trị hoặc cấu hình không hợp lệ: không bắt đầu.
+Khi đang chạy, nếu TP/SL bị mất/đổi, tool yêu cầu dừng game và chờ xác nhận dừng.
+Tool phụ thuộc giao diện, mạng và xác nhận của sàn; không bảo đảm giới hạn lỗ tuyệt đối.
+Không tự thay đổi loại tiền trong khi tool đang hoạt động.
+
+RELOAD
+Nhập số phút reload (0 = tắt) hoặc bấm Reload khi lượt hoàn thành.
+Không reload giữa lượt Auto đang chạy. Đợi hoàn thành rồi mới tải lại.
+Sau reload do tool: giữ cấu hình, kiểm tra đúng loại tiền, mở Auto/Nâng cao và chạy tiếp.
+Trạng thái reload hết hạn sau 5 phút. F5 thủ công không tự bật lại tool.
+Nếu lượt Auto không kết thúc thì reload vẫn chờ. Đây không phải cơ chế bỏ qua trạng thái chưa xác nhận.
+
+TELEGRAM
+Bấm Telegram trên panel. Nhập Bot token, Chat ID, bật gửi mỗi 3 phút rồi Lưu.
+Bot phải được bạn Start và có quyền gửi vào chat. Token lưu cục bộ trong tiện ích.
+Lần đầu gửi sau 3 phút. Nhiều tab chỉ gửi một tin mỗi chu kỳ.
+Số dư lấy trực tiếp từ ô ví trên một tab Limbo, kèm loại tiền và giờ đọc.
+Giữ Chrome/tab Limbo mở; máy ngủ/tab treo/mất mạng có thể làm lịch trễ.
+Không lấy được số dư thì không gửi dữ liệu cũ. Xem trạng thái tại trang cấu hình Telegram.
+
+KIỂM THỬ BẢN NÀY
+63 kiểm thử giả lập đạt: 60 Auto/panel/reload và 3 Telegram.
+Có 50 trường hợp Auto cơ bản và bài chạy 50 chu kỳ TP/SL liên tiếp.
+Bao gồm thiếu SL, SL bằng 0, SL đổi khi đang chạy, dữ liệu bị từ chối,
+nút bị khóa, bắt đầu chưa xác nhận, Dừng thủ công, reload và đồng bộ panel.
+Không đặt cược thật hay gửi Telegram thật trong kiểm thử. Chưa xác nhận vận hành thật trên tài khoản.
+BỔ SUNG BẢN 1.2.1 — KIỂM TRA TIỀN CƯỢC BAN ĐẦU
+Mặc định vẫn là 0.001, không phải 0.01. Nhập được 0.00001.
+Ô nhập cho phép dấu chấm hoặc dấu phẩy; tối đa 8 chữ số sau dấu thập phân.
+Hiển thị mức bắt đầu đủ 8 số lẻ, không dùng ký pháp khoa học.
+Sửa phản hồi panel cũ có thể ghi đè giá trị vừa nhập.
+Nhập tiền vào game bằng dạng đầy đủ 8 số lẻ, phát sự kiện input/change và blur.
+Đọc lại chính xác trước khi bắt đầu; nếu game đổi 0.001 thành 0.01 thì không bấm bắt đầu.
+123 kiểm thử giả lập đạt, gồm các mức 0.001, 0.00001, 0.0001, 0.01 và 0.00000001.
+Không kết luận đây là nguyên nhân khoản lỗ đã xảy ra; chưa xác minh bằng cược thật.
+
+Cập nhật: Dừng game, tắt tiện ích cũ, thay file trong cùng thư mục đã cài.
+Mở chrome://extensions, Reload Limbo, F5 các trang game rồi mở panel.
+Không bật đồng thời nhiều bản Limbo Restart/Auto.

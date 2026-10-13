@@ -1,0 +1,4 @@
+import http from 'node:http';
+import {readFile} from 'node:fs/promises';
+const root=new URL('../research-preview/',import.meta.url),types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.mjs':'text/javascript; charset=utf-8'};
+http.createServer(async(req,res)=>{try{const path=new URL(req.url,'http://localhost').pathname;const file=path==='/'?'index.html':path.slice(1);if(!['index.html','style.css','app.mjs','model.mjs','book.mjs'].includes(file)){res.writeHead(404).end();return;}const ext=file.slice(file.lastIndexOf('.'));res.setHeader('Content-Type',types[ext]);res.setHeader('Cache-Control','no-store');res.end(await readFile(new URL(file,root)));}catch{res.writeHead(500).end('Không đọc được trang xem trước.');}}).listen(8767,'127.0.0.1',()=>console.log('Research preview: http://127.0.0.1:8767'));

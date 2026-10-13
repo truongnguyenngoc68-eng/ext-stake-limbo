@@ -20,15 +20,20 @@ async function injectSlideConnection(tabId){
  const [result]=await chrome.scripting.executeScript({target:{tabId},func:()=>{
   const slide=location.protocol==='https:'&&location.pathname.replace(/\/$/,'').endsWith('/casino/games/slide');
   const dom=!!document.querySelector('input[data-testid="input-game-amount"]')&&!!document.querySelector('input[data-testid^="target-multiplier-"]');
-  return {slide,dom,loaded:!!globalThis.__slideLabObserverLoaded};
+  return {slide,dom,loaded:!!globalThis.__slideLabObserverLoaded,valid:globalThis.__slideLabLifecycle?.valid?.()===true};
  }});
  if(!result?.result?.slide)throw Error("Mở màn Slide và chờ tải xong, rồi bấm biểu tượng extension");
  let alive=false;
- if(result.result.loaded){try{const pong=await chrome.tabs.sendMessage(tabId,{type:'slide-lab-ping'});alive=pong?.ok===true&&pong.version==='1.0.50'}catch{}}
+ if(result.result.loaded){try{const pong=await chrome.tabs.sendMessage(tabId,{type:'slide-lab-ping'});alive=pong?.ok===true;
+  if(alive&&pong.version!=='1.0.56')return {ok:true,version:pong.version,updateAvailable:true};
+ }catch{}}
+ // A live observer owns the financial session. A failed handshake must not
+ // dispose it and create a competing engine while an async submit is pending.
+ if(!alive&&result.result.loaded&&result.result.valid)throw Error('Observer hiện có còn hoạt động; đang thử nối lại kênh đọc, giữ nguyên phiên');
  if(!alive){
   await chrome.scripting.executeScript({target:{tabId},files:['content-lifecycle.js','wallet-reader.js','content.js','recovery-monitor.js','progress-checkpoint-view.js']});
   const pong=await chrome.tabs.sendMessage(tabId,{type:'slide-lab-ping'});
-  if(pong?.ok!==true||pong.version!=='1.0.50')throw Error('Script trên trang chưa phản hồi sau khi nạp lại');
+  if(pong?.ok!==true||pong.version!=='1.0.56')throw Error('Script trên trang chưa phản hồi sau khi nạp lại');
  }
  return {ok:true};
 }

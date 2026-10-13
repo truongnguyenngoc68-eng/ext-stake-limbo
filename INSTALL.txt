@@ -1,1 +1,1 @@
-Slide Lab 1.0.50: Load unpacked from dist. Open Slide and click the extension icon on any compatible domain. Auto resume after F5 is enabled by default; toggle it in the panel. Only previously running sessions resume, after prior wagers are reconciled. Paused sessions remain paused.
+Slide Lab 1.0.56: Load unpacked from dist. Open Slide and click the extension icon on any compatible domain. Auto resume after F5 is enabled by default; toggle it in the panel. Only previously running sessions resume, after prior wagers are reconciled. Paused sessions remain paused.

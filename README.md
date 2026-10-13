@@ -1,3 +1,44 @@
+## v1.0.56 — Số dư đứng yên kích hoạt kiểm tra và tự phục hồi cược
+
+- Sau 3 lần kiểm tra số dư không đổi ở vòng có cược, đọc trạng thái native Auto, danh sách cược và tổng cược hiện tại, ghi chẩn đoán rồi chuyển sang phục hồi tự động.
+- Không chỉ dựa vào nút Auto đang hiện để bỏ qua cảnh báo. Dừng native và đối chiếu pending trước khi gửi lượt tiếp theo.
+- Số dư chưa đọc được: giữ ý định phục hồi và chờ xác minh lại; không đặt cược khi wallet chưa hợp lệ.
+- Timeout pending khi đang chạy đi vào phục hồi, còn Pause/Stop chủ động vẫn được tôn trọng. Không chạy hai phép kiểm tra số dư song song.
+
+## v1.0.55 — Kết nối sidebar không thay thế phiên đang hoạt động
+
+- Không nạp lại observer còn hợp lệ chỉ vì một lần ping thất bại hoặc phiên trang đang dùng phiên bản cũ; nối lại chỉ đọc trạng thái.
+- Callback của observer đã bị thay thế không được dừng native Auto hay ghi đè trạng thái của phiên mới.
+- Sidebar phát hiện kênh im lặng: hỏi lại trạng thái sau 5 giây, nối lại sau 15 giây; không gửi lại các lệnh cược.
+- Xóa cảnh báo kết nối cũ khi đã nhận dữ liệu. Cần Reload tiện ích để cài bản mới; kết nối lại không tự nâng cấp observer đang chạy.
+
+## v1.0.54 — Phục hồi lỗi chờ xác nhận và Continue phiên dừng lỗi
+
+- Lỗi chờ DOM đi vào phục hồi tự động, giữ journal cược nếu đã gửi; không bỏ pending để thử gửi lại ngay.
+- Continue cho phép dùng lại engine đã dừng lỗi dù chưa có pending; vẫn kiểm tra nguồn vòng, số dư, khóa tab và trạng thái native Auto.
+- Chuẩn bị danh sách giữ các dòng đã khớp, chỉ xóa/thêm dòng thay đổi; thử lại không dựng lại toàn bộ bảng vì chữ ký cache cũ.
+- Chờ DOM tối đa 5 giây, thông báo kèm bước đang chờ. Lưu ý định tự phục hồi qua lần tải lại kế tiếp.
+
+## v1.0.53 — Đồng bộ nhiều kết quả và tự phục hồi nguồn vòng
+
+- Nhận nhiều vòng trong một lần đọc: xử lý theo thứ tự, loại vòng trùng; nếu Auto liên tục và danh sách cược được xác nhận, tính theo mức đã gửi, không thay bằng mức bậc mới.
+- Vòng đến trong lúc chuẩn bị DOM được xếp hàng; nếu vòng đổi trước khi gửi, tự đồng bộ lại thay vì dừng phiên vĩnh viễn.
+- Gián đoạn nguồn vòng: giữ engine và journal cược, dừng native Auto, tự đối chiếu rồi tiếp tục khi nguồn và nút điều khiển sẵn sàng.
+- Thiếu lịch sử không được bịa thành thắng/thua; cược không đối chiếu được lưu vào recovery audit. Pause/Stop của người dùng hủy tự phục hồi.
+
+## v1.0.52 — Tự chuyển sang Tự động khi tiếp tục sau F5
+
+- Phiên đang chạy, bật tự tiếp tục sau F5: chọn tab Tự động trước khi xác nhận trạng thái Auto và tiếp tục engine đã lưu.
+- Nếu tab/nút chưa sẵn sàng, giữ yêu cầu tự tiếp tục để thử lại ở lần quan sát kế tiếp.
+- Continue dùng cùng luồng chuyển chế độ; giữ số vòng, bậc và lịch sử. Phiên đã Pause chủ động vẫn giữ Pause.
+- Thao tác chuyển tab không đặt cược; cấu hình và gửi cược tiếp tục qua driver hiện có.
+
+## v1.0.51 — Continue đối chiếu trạng thái Auto trên trang
+
+Xóa cờ Auto cũ khi trang xác nhận nút Bắt Đầu đang sẵn sàng; chuẩn hóa khoảng trắng nhãn nút. Không xóa cược chưa đối chiếu khi Continue bị từ chối hoặc tab khác giữ phiên. Giữ nguyên bậc và thống kê.
+
+Trang nghiên cứu riêng trong Công cụ: cấu hình BET/WAIT, nhiều target, điều kiện vào, lưu/nhân bản/xuất/nhập chiến thuật, đọc lịch sử quan sát và sổ tay 8 chương. Chỉ mô phỏng, chưa có kiểm định hiệu chỉnh nhiều cấu hình hay lệnh cược thật.
+
 ## v1.0.50 — Icon trạng thái
 
 Icon Chrome và trạng thái trong dashboard đồng bộ: xám chưa chạy, xanh đang chạy, đỏ lỗi/mất kết nối, vàng Pause/đang Pause. Giữ giao diện widget, lịch sử 50.000 vòng và dữ liệu phiên.

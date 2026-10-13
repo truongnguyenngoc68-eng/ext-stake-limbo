@@ -9,6 +9,8 @@ const files = new Set([
   'wallet-reader.js', 'content.js', 'recovery-monitor.js', 'progress-checkpoint-view.js',
   'content-lifecycle.js',
   'telegram-editor.js', 'round-archive.js', 'status-icons.js',
+  'research-launch.js', 'research-preview/index.html', 'research-preview/style.css',
+  'research-preview/app.mjs', 'research-preview/model.mjs', 'research-preview/book.mjs',
   manifest.background.service_worker,
   ...(manifest.content_scripts ?? []).flatMap(script => script.js ?? []),
   ...(manifest.web_accessible_resources ?? []).flatMap(group => group.resources),
@@ -16,5 +18,9 @@ const files = new Set([
 ]);
 for (const file of files) await access(new URL(file, root));
 await mkdir(new URL('dist/', root), {recursive: true});
-for (const file of files) await copyFile(new URL(file, root), new URL(`dist/${file}`, root));
+for (const file of files) {
+  const target=new URL(`dist/${file}`, root);
+  await mkdir(new URL('./',target),{recursive:true});
+  await copyFile(new URL(file, root),target);
+}
 console.log(`Packaged Slide Lab ${manifest.version}: ${files.size} files in dist/`);

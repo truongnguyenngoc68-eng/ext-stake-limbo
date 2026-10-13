@@ -5,7 +5,8 @@
   const commands = new Set(['ready', 'update-config', 'adjust-step', 'diagnostics',
     'pick-balance', 'check-live', 'start-live', 'stop-live', 'pause-live', 'resume-live', 'reset-live', 'auto-resume-setting']);
   let port = null, currentTab = null, generation = 0, windowId;
-  let retryTimer = null, retryDelay = 750;
+  let retryTimer = null, retryDelay = 750, lastMessageAt = 0, lastProbeAt = 0;
+  let connectionWarning = false;
   function retry() {
     if (retryTimer) return;
     const delay = retryDelay;
@@ -14,6 +15,7 @@
   }
   const send = (type, data) => frame.contentWindow.postMessage({channel: 'slide-lab', type, data}, origin);
   const disconnected = (reason = 'Mở tab Stake Slide rồi bấm biểu tượng extension để kết nối.') => {
+    connectionWarning = true;
     send('status', {ok: false, count: 0});
     send('picker-status', reason);
   };
@@ -43,9 +45,12 @@
       }
       const connected = chrome.tabs.connect(tab.id, {name: 'slide-lab-panel'});
       port = connected;
+      lastMessageAt = Date.now(); lastProbeAt = 0;
       connected.onMessage.addListener(message => {
         if (port === connected && message?.channel === 'slide-lab' && !commands.has(message.type)) {
           retryDelay = 750;
+          lastMessageAt = Date.now();
+          if (connectionWarning) { connectionWarning = false; send('picker-status', ''); }
           send(message.type, message.data);
         }
       });
@@ -75,4 +80,18 @@
     } else if (change.status === 'complete') connect();
   });
   window.addEventListener('unload', detach);
+  // A port can survive while its page listener no longer responds. Probe only the
+  // read-only ready handshake; never replay a financial command after reconnect.
+  if (typeof setInterval === 'function') setInterval(() => {
+    if (!port) return;
+    const now = Date.now();
+    if (now - lastMessageAt >= 15000) {
+      detach(); disconnected('Kênh đọc trang chưa phản hồi; đang tự nối lại, giữ nguyên phiên…'); retry(); return;
+    }
+    if (now - lastMessageAt >= 5000 && now - lastProbeAt >= 5000) {
+      lastProbeAt = now;
+      try { port.postMessage({channel:'slide-lab',type:'ready'}); }
+      catch { detach(); disconnected('Đang tự nối lại kênh đọc trang…'); retry(); }
+    }
+  }, 5000);
 })();

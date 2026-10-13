@@ -3,7 +3,7 @@ import type {Config,Round,Target} from './model.ts';
 const SCALE=100000000n;
 const units=(v:number)=>BigInt(Math.round(v*1e8));
 const value=(v:bigint)=>Number(v)/1e8;
-export interface Trade {tableId:string;roundId:string;time:number;result:number;target:number;step:number;amount:number;outcome:'WIN'|'LOSS'|'WAIT';profit:number}
+export interface Trade {tableId:string;roundId:string;time:number;result:number;target:number;step:number;stepRound?:number;stepRounds?:number;amount:number;outcome:'WIN'|'LOSS'|'WAIT';profit:number}
 export interface TargetStats {wins:number;losses:number;turnover:number;profit:number;lossStreak:number;maxLossStreak:number}
 interface Position {step:number;used:number;active:boolean;stopped:boolean}
 export function matches(history:Round[],t:Target){
@@ -47,7 +47,7 @@ export class Engine {
    const profit=s.action==='WAIT'?0n:win?units(s.amount)*units(actualTarget)/SCALE-units(s.amount):-units(s.amount);
    this.balanceUnits+=profit;if(s.action==='BET'){this.turnoverUnits+=units(s.amount);if(win)this.wins++;else this.losses++}
    if(s.action==='BET'){const a=this.byTarget[t.id];a.profit=Number((a.profit+value(profit)).toFixed(8));a.turnover=Number((a.turnover+s.amount).toFixed(8));if(win){a.wins++;a.lossStreak=0}else{a.losses++;a.lossStreak++;a.maxLossStreak=Math.max(a.maxLossStreak,a.lossStreak)}}
-   output.push({tableId:t.id,roundId:r.id,time:r.time,result:r.value,target:actualTarget,step:p.step+1,amount:s.action==='BET'?s.amount:0,outcome:s.action==='WAIT'?'WAIT':win?'WIN':'LOSS',profit:value(profit)});
+   output.push({tableId:t.id,roundId:r.id,time:r.time,result:r.value,target:actualTarget,step:p.step+1,stepRound:p.used+1,stepRounds:s.rounds,amount:s.action==='BET'?s.amount:0,outcome:s.action==='WAIT'?'WAIT':win?'WIN':'LOSS',profit:value(profit)});
    if(s.action==='BET'&&win){p.step=0;p.used=0;p.active=false}else if(++p.used>=s.rounds){p.used=0;if(p.step<t.steps.length-1)p.step++;else if(this.config.exhausted==='reset'){p.step=0;p.active=false}else if(this.config.exhausted==='stop')p.stopped=true}
   }
   this.history.push(r);this.history=this.history.slice(-1000);this.trades.push(...output);this.trades=this.trades.slice(-10000);

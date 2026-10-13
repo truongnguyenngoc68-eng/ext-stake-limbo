@@ -41,7 +41,7 @@ function liveFixture() {
   const fixture = page(), {w} = fixture;
   // Expose closure state only in this test's evaluation, never in the shipped file.
   w.eval(read('content.js').replace('/* Recovery watchdog:', `globalThis.releaseTest={Live:et,Driver:j,control:slideProgressControl,persist:saveSlideSession,
-    getSession:()=>h,setSession:session=>{h=session;y=[{id:'seed',value:1,time:Date.now()}];U=[...y];x=Date.now();$=false}};
+    getSession:()=>h,autoResume:slideMaybeResumeAfterReload,setSource:rounds=>{y=rounds;U=[...rounds];x=Date.now();$=false},setSession:session=>{h=session;y=[{id:'seed',value:1,time:Date.now()}];U=[...y];x=Date.now();$=false}};
     /* Recovery watchdog:`));
   w.navigator.locks = {request: async (_name, _options, callback) => callback({})};
   const config = defaults();
@@ -161,6 +161,163 @@ test('Missing receipt no longer stops a matching next result or locks Pause', as
     assert.equal(live.pending, null); assert.equal(live.pausing, false);
   } finally { dom.window.close(); }
 });
+test('Three delayed results settle once in order and retain uninterrupted native Auto', async () => {
+  const {dom,w,live,driver}=liveFixture();
+  try {
+    live.checkBalance=async()=>{};driver.activeButton=()=>({});driver.verify=()=>true;
+    await live.tick();
+    live.observe([round('one'),round('two'),round('three')]);
+    assert.equal(live.running,true);assert.equal(live.betRounds,3);
+    assert.equal(live.engine.positions['450'].used,3);assert.equal(live.engine.profit,-.03);
+    assert.equal(live.pending.anchor,'three');assert.equal(live.pending.bets[0].amount,.01);
+    live.observe([round('one'),round('two'),round('three')]);
+    assert.equal(live.betRounds,3);assert.equal(live.engine.profit,-.03);
+  }finally{dom.window.close()}
+});
+
+test('Catch-up accounts original native stakes across a ladder transition and a win', async () => {
+  const {dom,live,driver}=liveFixture();
+  try {
+    live.checkBalance=async()=>{};driver.activeButton=()=>({});driver.verify=()=>true;
+    live.engine.config.targets[0].steps=[{amount:.01,rounds:1,action:'BET'},{amount:.03,rounds:100,action:'BET'}];
+    await live.tick();
+    live.observe([round('one'),round('two'),round('three',450)]);
+    assert.equal(live.betRounds,3);assert.equal(live.engine.profit,4.47);
+    assert.deepEqual(Array.from(live.engine.trades,t=>t.amount),[.01,.01,.01]);
+    assert.equal(live.engine.positions['450'].step,0);assert.equal(live.pending.bets[0].amount,.01);
+  }finally{dom.window.close()}
+});
+
+test('Results arriving during DOM preparation are deferred instead of stopping the session', async () => {
+  const {dom,live,driver}=liveFixture();
+  try {
+    live.checkBalance=async()=>{};let prepared;
+    driver.configure=()=>new Promise(resolve=>{prepared=resolve});
+    const ticking=live.tick();await flush();
+    live.observe([round('one')]);assert.equal(live.running,true);assert.equal(live.deferredRounds.length,1);
+    prepared();await ticking;
+    assert.equal(live.running,true);assert.equal(live.deferredRounds.length,0);assert.equal(live.betRounds,1);
+  }finally{dom.window.close()}
+});
+
+test('Feed recovery resumes automatically after native stop becomes visible; user stop cancels retry', async () => {
+  const {dom,w,live,driver}=liveFixture();
+  try {
+    live.checkBalance=async()=>{};driver.currencyCheck=()=>({});
+    await live.tick();
+    await live.recoverFeed('Test interrupted feed');
+    assert.equal(live.running,false);assert.equal(live.needsReconciliation,true);
+    w.releaseTest.setSource([round('seed'),round('settled')]);
+    const continuing=w.releaseTest.autoResume();await flush();
+    assert.equal(live.running,true);assert.equal(live.betRounds,1);assert.equal(live.engine.profit,-.01);
+    await live.stop('Đã dừng bởi người dùng');await continuing;
+    await w.releaseTest.autoResume();assert.equal(live.running,false);
+  }finally{dom.window.close()}
+});
+
+test('Unverified delayed batch enters automatic recovery without inventing three wager results', async () => {
+  const {dom,w,live,driver}=liveFixture();
+  try {
+    live.checkBalance=async()=>{};driver.currencyCheck=()=>({});driver.verify=()=>false;
+    await live.tick();live.observe([round('one'),round('two'),round('three')]);await flush();
+    assert.equal(live.running,false);assert.equal(live.engine.profit,0);assert.equal(live.betRounds,0);
+    assert.ok(live.recoveryPending);assert.equal(live.needsReconciliation,true);
+    await live.stop('Đã dừng bởi người dùng');await w.releaseTest.autoResume();assert.equal(live.running,false);
+  }finally{dom.window.close()}
+});
+
+test('Catch-up retains the observed ledger but honors the configured round limit before rearming', async () => {
+  const {dom,live,driver}=liveFixture();
+  try {
+    live.checkBalance=async()=>{};driver.activeButton=()=>({});driver.verify=()=>true;
+    live.options.maxRounds=2;await live.tick();
+    live.observe([round('one'),round('two'),round('three')]);await flush();
+    assert.equal(live.betRounds,3);assert.equal(live.engine.profit,-.03);
+    assert.equal(live.running,false);assert.equal(live.pending,null);
+  }finally{dom.window.close()}
+});
+
+test('Driver reconciles only changed bets and reuses rows from a previous partial attempt', async () => {
+  const {dom,w}=liveFixture();
+  try {
+    w.document.body.insertAdjacentHTML('beforeend',`<div class="game-sidebar">
+      <button>Bắt Đầu Cược Tự Động</button>
+      <input data-testid="input-game-amount" data-bet-amount-active-currency="usdt">
+      <input data-testid="target-multiplier-test"><input data-testid="limit-input" value="0">
+      <button data-testid="autobet-add-bet">Thêm cược</button><div class="my-bets"><ul class="rows"></ul></div>
+    </div>`);
+    const rows=w.document.querySelector('ul.rows');let removed=0,added=0;
+    const addRow=(target,amount)=>{
+      const row=w.document.createElement('li');row.innerHTML=`${target}× ${amount}<button aria-label="delete"><svg></svg></button>`;
+      row.querySelector('button').onclick=()=>{removed++;row.remove()};rows.appendChild(row);return row;
+    };
+    const kept=addRow(90,.002);addRow(680,.001);
+    w.document.querySelector('[data-testid="autobet-add-bet"]').onclick=()=>{added++;addRow(Number(w.document.querySelector('[data-testid^="target-multiplier-"]').value),Number(w.document.querySelector('[data-testid="input-game-amount"]').value))};
+    const driver=new w.releaseTest.Driver(w.document,()=>true,'usdt');
+    const desired=[{id:'90',target:90,amount:.002,action:'BET'},{id:'680',target:680,amount:.01,action:'BET'}];
+    driver.lastSignature='old';await driver.configure(desired,0);
+    assert.equal(removed,1);assert.equal(added,1);assert.equal(rows.firstElementChild,kept);
+    assert.equal(driver.verify(desired),true);
+    // Retry after a delayed confirmation: existing matching rows are not rebuilt or duplicated.
+    driver.lastSignature='stale';await driver.configure(desired,0);
+    assert.equal(removed,1);assert.equal(added,1);assert.equal(rows.children.length,2);
+  }finally{dom.window.close()}
+});
+
+test('DOM timeout before submission automatically recovers and retries configuration without resetting', async () => {
+  const {dom,w,live,driver,events}=liveFixture();
+  try {
+    live.checkBalance=async()=>{};driver.currencyCheck=()=>({});let attempts=0;
+    driver.configure=async()=>{if(++attempts===1)throw Error('Hết thời gian chờ DOM xác nhận: xác nhận thêm dòng cược');};
+    live.engine.positions['450'].used=94;live.betRounds=2796;
+    await live.tick();assert.equal(live.running,false);assert.equal(live.paused,true);
+    assert.equal(live.pending,null);assert.equal(events.filter(e=>e==='submit').length,0);
+    const continuing=w.releaseTest.autoResume();await flush();assert.equal(live.running,true);
+    await live.tick();assert.equal(attempts,2);assert.equal(events.filter(e=>e==='submit').length,1);
+    assert.equal(live.betRounds,2796);assert.equal(live.engine.positions['450'].used,94);
+    await live.stop('Test complete');await continuing;
+  }finally{dom.window.close()}
+});
+
+test('DOM timeout after submission preserves pending wager until recovery settles it once', async () => {
+  const {dom,w,live,driver,events}=liveFixture();
+  try {
+    live.checkBalance=async()=>{};driver.currencyCheck=()=>({});
+    driver.submit=async()=>{events.push('submit');throw Error('Hết thời gian chờ DOM xác nhận: nhận cược');};
+    await live.tick();assert.equal(live.running,false);assert.ok(live.recoveryPending);
+    assert.equal(live.betRounds,0);assert.equal(live.engine.profit,0);
+    w.releaseTest.setSource([round('seed'),round('settled')]);
+    const continuing=w.releaseTest.autoResume();await flush();
+    assert.equal(live.running,true);assert.equal(live.betRounds,1);assert.equal(live.engine.profit,-.01);
+    assert.equal(events.filter(e=>e==='submit').length,1);
+    live.observe([round('settled')]);assert.equal(live.betRounds,1);
+    await live.stop('Test complete');await continuing;
+  }finally{dom.window.close()}
+});
+
+test('Continue can resume a stopped error session with no pending wager after validating native state', async () => {
+  const {dom,w,live}=liveFixture();
+  try {
+    w.document.body.insertAdjacentHTML('beforeend','<div class="game-sidebar"><button>Bắt Đầu Cược Tự Động</button></div>');
+    live.driver=new w.releaseTest.Driver(w.document,()=>live.running,'usdt');
+    live.running=false;live.paused=false;live.pending=null;live.betRounds=2796;
+    const continuing=w.releaseTest.control('resume-live');await flush();
+    assert.equal(live.running,true);assert.equal(live.betRounds,2796);
+    await live.stop('Test complete');await continuing;
+  }finally{dom.window.close()}
+});
+
+test('Disposed observer cannot stop native Auto when its old asynchronous submit rejects', async () => {
+  const {dom,w,live,driver,events}=liveFixture();
+  try {
+    let rejectSubmit;driver.submit=()=>new Promise((_resolve,reject)=>{rejectSubmit=reject});
+    const ticking=live.tick();await flush();assert.ok(live.pending);
+    w.__slideLabLifecycle.dispose();assert.equal(live.running,false);assert.equal(live.superseded,true);
+    rejectSubmit(Error('Đã dừng'));await ticking;
+    assert.equal(events.filter(e=>e==='stop').length,0);
+  }finally{dom.window.close()}
+});
+
 test('Manual Continue archives unresolved wager without inventing a result; Reset remains available', async () => {
   const {dom, w, live} = liveFixture();
   try {
@@ -177,6 +334,86 @@ test('Manual Continue archives unresolved wager without inventing a result; Rese
     assert.equal(w.releaseTest.getSession().betRounds, 0);
   } finally { dom.window.close(); }
 });
+test('Continue refreshes stale Auto flag from the enabled Start button and retains the session', async () => {
+  const {dom,w,live}=liveFixture();
+  try {
+    w.document.body.insertAdjacentHTML('beforeend','<div class="game-sidebar"><button> Bắt Đầu\n Cược\u00a0Tự Động </button></div>');
+    const driver=new w.releaseTest.Driver(w.document,()=>true,'usdt');
+    driver.nativeActive=true;
+    let clicks=0;w.document.querySelector('.game-sidebar button').onclick=()=>clicks++;
+    await driver.stopNative();assert.equal(driver.nativeActive,false);assert.equal(clicks,0);
+    live.driver=driver;driver.nativeActive=true;live.running=false;live.paused=true;
+    live.engine.positions['450'].used=44;live.betRounds=1686;
+    const continuing=w.releaseTest.control('resume-live');await flush();
+    assert.equal(live.running,true);assert.equal(driver.nativeActive,false);
+    assert.equal(live.engine.positions['450'].used,44);assert.equal(live.betRounds,1686);assert.equal(clicks,0);
+    await live.stop('Test complete');await continuing;
+  }finally{dom.window.close()}
+});
+
+test('Continue switches Manual to Auto once without resetting progress or submitting a wager', async () => {
+  const {dom,w,live}=liveFixture();
+  try {
+    w.document.body.insertAdjacentHTML('beforeend','<div class="game-sidebar"><button data-testid="auto-tab">Tự động</button><button class="action">Thêm cược</button></div>');
+    const tab=w.document.querySelector('[data-testid="auto-tab"]');let switches=0,submits=0;
+    tab.onclick=()=>{switches++;w.document.querySelector('.action').textContent='Bắt Đầu Cược Tự Động';};
+    w.document.querySelector('.action').onclick=()=>submits++;
+    live.driver=new w.releaseTest.Driver(w.document,()=>live.running,'usdt');
+    live.running=false;live.paused=true;live.engine.positions['450'].used=43;live.betRounds=1743;
+    const continuing=w.releaseTest.control('resume-live');await flush();
+    assert.equal(live.running,true);assert.equal(switches,1);assert.equal(submits,0);
+    assert.equal(live.betRounds,1743);assert.equal(live.engine.positions['450'].used,43);
+    await live.stop('Test complete');await continuing;
+  }finally{dom.window.close()}
+});
+
+test('F5 automatically retries a disabled Auto tab then resumes the saved engine without Continue', async () => {
+  const first=liveFixture();let saved;
+  try {
+    first.w.chrome.storage.local.set=async data=>{if(data['slide-lab-durable-live-v1'])saved=structuredClone(data['slide-lab-durable-live-v1']);};
+    first.live.engine.positions['450'].used=43;first.live.betRounds=1743;
+    first.w.releaseTest.persist();await flush();
+  }finally{first.dom.window.close()}
+  const {dom,w}=page();
+  try {
+    w.document.body.insertAdjacentHTML('beforeend','<div class="game-sidebar"><input data-testid="input-game-amount" data-bet-amount-active-currency="usdt"><button data-testid="auto-tab" disabled>Tự động</button><button class="action">Thêm cược</button></div>');
+    w.chrome.storage.local.get=async key=>({[key]:key==='slide-lab-auto-resume-v1'?true:saved});
+    w.navigator.locks={request:async(_name,_options,callback)=>callback({})};
+    w.eval(read('content.js').replace('/* Recovery watchdog:',`globalThis.autoModeTest={session:()=>h,resume:slideMaybeResumeAfterReload,wanted:()=>slideAutoResumeWanted,source:()=>{y=[{id:'seed',value:1,time:Date.now()}];U=[...y];x=Date.now();$=false}};/* Recovery watchdog:`));
+    await flush();const session=w.autoModeTest.session();w.autoModeTest.source();
+    await w.autoModeTest.resume();assert.equal(session.running,false);assert.equal(w.autoModeTest.wanted(),true);
+    const tab=w.document.querySelector('[data-testid="auto-tab"]');let switches=0;
+    tab.disabled=false;tab.onclick=()=>{switches++;w.document.querySelector('.action').textContent='Bắt Đầu Cược Tự Động';};
+    const continuing=w.autoModeTest.resume();await flush();
+    assert.equal(session.running,true);assert.equal(w.autoModeTest.wanted(),false);assert.equal(switches,1);
+    assert.equal(session.betRounds,1743);assert.equal(session.engine.positions['450'].used,43);
+    await session.stop('Test complete');await continuing;
+  }finally{dom.window.close()}
+});
+
+test('Rejected Continue preserves unresolved wagers while Auto is running or its button is unknown', async () => {
+  const {dom,w,live}=liveFixture();
+  try {
+    await live.tick();const pending=live.pending;live.running=false;live.paused=true;
+    w.document.body.insertAdjacentHTML('beforeend','<div class="game-sidebar"><button>Dừng Cược Tự Động</button></div>');
+    live.driver=new w.releaseTest.Driver(w.document,()=>true,'usdt');
+    await w.releaseTest.control('resume-live');assert.equal(live.running,false);assert.equal(live.pending,pending);
+    w.document.querySelector('.game-sidebar button').textContent='Bắt Đầu Cược Tự Động';
+    w.document.querySelector('.game-sidebar button').disabled=true;
+    await w.releaseTest.control('resume-live');assert.equal(live.running,false);assert.equal(live.pending,pending);
+    assert.equal(live.engine.profit,0);
+  }finally{dom.window.close()}
+});
+
+test('Continue cannot discard unresolved wagers when another tab holds the session lock', async () => {
+  const {dom,w,live}=liveFixture();
+  try {
+    await live.tick();const pending=live.pending;live.running=false;live.paused=true;
+    w.navigator.locks.request=async(_name,_options,callback)=>callback(null);
+    await w.releaseTest.control('resume-live');assert.equal(live.pending,pending);assert.equal(live.running,false);
+  }finally{dom.window.close()}
+});
+
 test('Pause during configuration blocks a new submission and keeps progress', async () => {
   const {dom, w, live, driver, events} = liveFixture();
   try {
@@ -225,7 +462,7 @@ test('Progress controls invoke Start, Pause, Resume and Reset with correct avail
 });
 test('Arbitrary Slide domains connect using active tab permission and DOM preparation', async () => {
   const manifest = JSON.parse(read('manifest.json'));
-  assert.equal(manifest.version, '1.0.50');
+  assert.equal(manifest.version, '1.0.56');
   assert.ok(manifest.permissions.includes('activeTab'));
   assert.ok(manifest.permissions.includes('scripting'));
   assert.deepEqual(manifest.host_permissions, ['https://stake1073.com/*', 'https://www.stake1073.com/*']);
@@ -277,7 +514,7 @@ test('Dynamic loader observes Manual mode, deduplicates injection and validates 
     runtime: {id: 'test', getURL: path => `chrome-extension://test/${path}`,
       onMessage: {addListener: callback => listeners.push(callback)}},
     action: {onClicked: {addListener() {}}}, sidePanel: {setPanelBehavior: async () => {}},
-    tabs:{sendMessage:async()=>({ok:true,version:'1.0.50'})},scripting: {executeScript: async options => {
+    tabs:{sendMessage:async()=>({ok:true,version:'1.0.56'})},scripting: {executeScript: async options => {
       if (options.func) return [{result: {slide, dom: validDOM, loaded}}];
       injected.push(options.files); loaded = true; return [];
     }},
@@ -476,19 +713,83 @@ test('Panel retains UI through F5 and reconnects even after a long healthy sessi
   assert.equal(typeof scheduled,'function');scheduled();await flush();assert.equal(connections,3);
 });
 
-test('Stale wallet warns while native Auto remains active; invalid wallet still stops', async () => {
+test('Silent panel port is probed read-only, reconnected, and its stale warning clears on data', async () => {
+  let messageHandler,heartbeat,retry,now=0;let messages=[],posts=[],connections=0,receive;
+  const child={postMessage:message=>messages.push(message)},frame={contentWindow:child,src:'index.html'};
+  const makePort=()=>({postMessage:message=>posts.push(message),disconnect(){},onMessage:{addListener:callback=>receive=callback},onDisconnect:{addListener(){}}});
+  vm.runInNewContext(read('sidepanel.js'),{Date:{now:()=>now},location:{origin:'chrome-extension://test'},
+    setInterval:callback=>{heartbeat=callback},setTimeout:callback=>{retry=callback;return 1},clearTimeout(){},
+    document:{getElementById:()=>frame},window:{addEventListener:(name,callback)=>{if(name==='message')messageHandler=callback}},
+    chrome:{runtime:{sendMessage:async()=>({ok:true})},windows:{getCurrent:async()=>({id:1})},tabs:{query:async()=>[{id:8}],connect:()=>{connections++;return makePort()},onActivated:{addListener(){}},onUpdated:{addListener(){}}}}});
+  messageHandler({source:child,origin:'chrome-extension://test',data:{channel:'slide-lab',type:'ready'}});await flush();
+  now=5000;heartbeat();assert.equal(posts.at(-1).type,'ready');
+  now=16000;heartbeat();assert.equal(typeof retry,'function');retry();await flush();assert.equal(connections,2);
+  receive({channel:'slide-lab',type:'status',data:{ok:true}});
+  assert.ok(messages.some(message=>message.type==='picker-status'&&message.data===''));
+  assert.equal(frame.src,'index.html');assert.ok(posts.every(message=>message.type==='ready'));
+});
+
+test('Healthy observer is not reinjected after a failed ping or solely for a version mismatch', async () => {
+  for(const ping of ['failed','older']){
+    const listeners=[];let injected=0;
+    vm.runInNewContext(read('background.js'),{Promise,URL,console,chrome:{
+      runtime:{id:'test',getURL:path=>'chrome-extension://test/'+path,onMessage:{addListener:callback=>listeners.push(callback)}},
+      action:{onClicked:{addListener(){}}},sidePanel:{setPanelBehavior:async()=>{}},
+      tabs:{sendMessage:async()=>{if(ping==='failed')throw Error('Temporary disconnect');return {ok:true,version:'1.0.53'}}},
+      scripting:{executeScript:async options=>{if(options.func)return [{result:{slide:true,dom:true,loaded:true,valid:true}}];injected++;return []}}
+    }});
+    const result=await new Promise(resolve=>listeners.at(-1)({type:'slide-ensure-connection',tabId:8},{id:'test',url:'chrome-extension://test/sidepanel.html'},resolve));
+    assert.equal(injected,0);assert.equal(result.ok,ping==='older');
+    if(ping==='older')assert.equal(result.updateAvailable,true);
+  }
+});
+
+test('Three unchanged wager balances check native placements, recover, and resume without duplicate submission', async () => {
   const {dom,w,live,driver,events}=liveFixture();
   try {
     w.setTimeout=callback=>setTimeout(callback,0);
     live.balanceGuard.last=134.69951021;
-    live.pending={anchor:'seed',bets:[{amount:.01,target:450}],ids:new Set(['450'])};
-    driver.activeButton=()=>({});driver.assertAlive=()=>{};driver.health=()=> 'OK';
+    live.pending={anchor:'seed',bets:[{id:'450',amount:.01,target:450,action:'BET'}],ids:new Set(['450'])};
+    let active=true,verified=0;
+    driver.activeButton=()=>active?{}:null;driver.currencyCheck=()=>({});
+    driver.verify=()=>{verified++;return true};
+    driver.stopNative=async()=>{active=false;events.push('stop')};
     for(let i=0;i<3;i++)await live.checkBalance([{amount:.01,target:450}]);
-    assert.equal(live.running,true);assert.equal(events.includes('stop'),false);
-    assert.match(live.message,/Số dư hiển thị chưa đổi/);
-    driver.readBalance=()=>null;await live.checkBalance([{amount:.01,target:450}]);
-    assert.equal(live.running,false);assert.match(live.message,/Không đọc được số dư/);
+    assert.equal(live.running,false);assert.equal(verified,1);assert.equal(events.filter(e=>e==='stop').length,1);
+    assert.ok(live.recoveryPending);assert.match(live.message,/Số dư không đổi.*khôi phục cược/);
+    await w.releaseTest.autoResume();assert.equal(live.running,false);assert.equal(events.includes('submit'),false);
+    w.releaseTest.setSource([round('seed'),round('settled')]);
+    const continuing=w.releaseTest.autoResume();await flush();
+    assert.equal(live.running,true);assert.equal(live.betRounds,1);assert.equal(live.balanceGuard.unchanged,0);
+    assert.equal(events.includes('submit'),false);
+    await live.stop('Test complete');await continuing;
   } finally {dom.window.close()}
+});
+
+test('Stopped native Auto with unchanged balance recovers the same engine automatically', async () => {
+  const {dom,w,live,driver}=liveFixture();
+  try {
+    w.setTimeout=callback=>setTimeout(callback,0);driver.currencyCheck=()=>({});driver.verify=()=>true;
+    live.betRounds=3080;live.engine.positions['450'].used=147;
+    for(let i=0;i<3;i++)await live.checkBalance([{id:'450',amount:.01,target:450}]);
+    assert.equal(live.running,false);
+    const continuing=w.releaseTest.autoResume();await flush();
+    assert.equal(live.running,true);assert.equal(live.betRounds,3080);assert.equal(live.engine.positions['450'].used,147);
+    await live.stop('Test complete');await continuing;
+  }finally{dom.window.close()}
+});
+
+test('Unreadable balance keeps automatic recovery waiting until wallet is verified again', async () => {
+  const {dom,w,live,driver}=liveFixture();
+  try {
+    w.setTimeout=callback=>setTimeout(callback,0);let wallet=null;
+    driver.readBalance=()=>wallet;driver.currencyCheck=()=>({});
+    await live.checkBalance([{amount:.01,target:450}]);assert.equal(live.running,false);
+    assert.match(live.message,/Không đọc được số dư/);
+    await w.releaseTest.autoResume();assert.equal(live.running,false);
+    wallet=134.4;const continuing=w.releaseTest.autoResume();await flush();assert.equal(live.running,true);
+    await live.stop('Test complete');await continuing;
+  }finally{dom.window.close()}
 });
 test('Background commits snapshots after page unload and rejects older revisions', async () => {
   const listeners=[];let stored;
@@ -514,7 +815,7 @@ test('Stale loaded marker triggers fresh script injection and requires a live ve
   vm.runInNewContext(read('background.js'),{Promise,URL,console,chrome:{
     runtime:{id:'test',getURL:path=>'chrome-extension://test/'+path,onMessage:{addListener:callback=>listeners.push(callback)}},
     action:{onClicked:{addListener(){}}},sidePanel:{setPanelBehavior:async()=>{}},
-    tabs:{sendMessage:async()=>{if(!fresh)throw Error('Receiving end does not exist');return {ok:true,version:'1.0.50'};}},
+    tabs:{sendMessage:async()=>{if(!fresh)throw Error('Receiving end does not exist');return {ok:true,version:'1.0.56'};}},
     scripting:{executeScript:async options=>{if(options.func)return [{result:{slide:true,dom:true,loaded:true}}];injected.push(options.files);fresh=true;return [];}}
   }});
   const result=await new Promise(resolve=>listeners.at(-1)({type:'slide-ensure-connection',tabId:8},{id:'test',url:'chrome-extension://test/sidepanel.html'},resolve));

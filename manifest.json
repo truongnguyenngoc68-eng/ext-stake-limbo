@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Slide Lab v1.0.50 - Live Widgets",
-  "version": "1.0.50",
+  "name": "Slide Lab v1.0.56 - Live Widgets",
+  "version": "1.0.56",
   "permissions": [
     "storage",
     "sidePanel",
