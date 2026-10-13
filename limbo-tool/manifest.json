@@ -7,7 +7,8 @@
     "storage",
     "alarms",
     "sidePanel",
-    "scripting"
+    "scripting",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://api.telegram.org/*",
@@ -40,6 +41,7 @@
         "https://stake1022.com/*"
       ],
       "js": [
+        "debug-log.js",
         "content.js"
       ],
       "run_at": "document_idle"

@@ -34,8 +34,8 @@ test('Invalid financial payloads are rejected without changing volume',()=>{
 });
 function observer(data){
  const messages=[];let calls=0;const response={clone:()=>({json:async()=>data})},returned=Promise.resolve(response);
- const window={postMessage:m=>messages.push(m),fetch:()=>{calls++;return returned}};
- const context={window,location:{origin:'https://stake1022.com',href:'https://stake1022.com/vi/casino/games/limbo'},document:{documentElement:{getAttribute:()=> 'cycle-1'}},URL,Reflect,JSON,Number};
+ const window={addEventListener(){},postMessage:m=>messages.push(m),fetch:()=>{calls++;return returned}};
+ const context={window,location:{origin:'https://stake1022.com',href:'https://stake1022.com/vi/casino/games/limbo'},document:{documentElement:{getAttribute:()=> 'cycle-1'}},URL,Reflect,JSON,Number,crypto:globalThis.crypto};
  vm.runInNewContext(read('bet-observer.js'),context);return {window,messages,returned,calls:()=>calls};
 }
 const mutation={query:'mutation Test { limboBet { id amount payout currency } }'};

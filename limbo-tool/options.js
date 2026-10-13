@@ -29,3 +29,5 @@ $('stakeDomain').value=host;$('domainStatus').textContent='Đã lưu '+host+' ·
 }catch(e){$('domainStatus').textContent=e.message;}};
 
 $('extensionVersion').textContent='v'+(chrome.runtime.getManifest?.().version||'Không xác định');
+
+document.getElementById('debugLogs').onclick=()=>chrome.tabs.create({url:chrome.runtime.getURL('debug.html')});

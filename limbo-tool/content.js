@@ -8,7 +8,7 @@
   const money=s=>{const text=String(s).trim().replace(',','.');return /^(?:\d+(?:\.\d{1,8})?|\.\d{1,8})$/.test(text)?Number(text):NaN};
   const isLimbo=()=>/\/casino\/games\/limbo\/?$/.test(location.pathname);
   let statCycle='';
-  function stat(event){try{if(typeof chrome!=='undefined'&&chrome.runtime?.sendMessage)void chrome.runtime.sendMessage({type:'limbo-stat-event',event}).catch(()=>{});}catch{}}
+  function stat(event){globalThis.LimboLog?.emit('bet.'+event.kind,event,event.kind==='issue'?'error':'info',event.trace||event.cycle);try{if(typeof chrome!=='undefined'&&chrome.runtime?.sendMessage)void chrome.runtime.sendMessage({type:'limbo-stat-event',event}).catch(()=>{});}catch{}}
   function startStats(){
     statCycle=crypto.randomUUID();document.documentElement.setAttribute('data-limbo-stat-cycle',statCycle);
     stat({kind:'start',id:statCycle,currency:identity,tp:config.tp,sl:config.sl});
@@ -53,18 +53,32 @@
   document.documentElement.append(host);
   const field=id=>root.querySelector('#'+id),status=root.querySelector('output');
   let state='OFF',config=null,startedAt=0,lastAction=0,stableAt=0,readyAt=0,runningSeen=false,cycles=0,identity='',reloadAt=0,reloadWanted=false,initialReady=true;
-  const notice=t=>{status.textContent=t};
+  const debug=(event,data={},level='info',trace)=>globalThis.LimboLog?.emit(event,data,level,trace);
+  function debugSnapshot(){
+    const ids=['input-game-amount','target-multiplier','stop-on-profit-input','stop-on-loss-input','limit-input','on-win-input','on-loss-input','auto-bet-button'];
+    return {state,config,cycles,identity,reloadWanted,reloadAt,statCycle,startedAt,lastAction,stableAt,readyAt,runningSeen,initialReady,status:status.textContent,wallet:walletSnapshot(),seeds:[...document.querySelectorAll('[data-testid*="seed" i]')].filter(visible).slice(0,30).map(e=>({id:e.getAttribute('data-testid'),value:e.value??e.textContent?.slice(0,2000)})),game:Object.fromEntries(ids.map(id=>{const e=one(id);return [id,e?{value:e.value,text:e.tagName==='BUTTON'?e.textContent:undefined,disabled:e.disabled,autoStatus:e.getAttribute('data-autobet-status'),valid:e.validity?{valid:e.validity.valid,stepMismatch:e.validity.stepMismatch,rangeUnderflow:e.validity.rangeUnderflow,rangeOverflow:e.validity.rangeOverflow}:null}:null]}))};
+  }
+  globalThis.LimboLog?.setSnapshot(debugSnapshot);
+  const notice=t=>{const changed=status.textContent!==t;status.textContent=t;if(changed)debug('state.notice',{output:t,snapshot:debugSnapshot()},/lỗi|không xác nhận|không hợp lệ|không đúng|không khớp|mất trạng thái/i.test(t)?'error':'info')};
+  setInterval(()=>debug('monitor.snapshot',debugSnapshot()),5000);
+  document.addEventListener('click',e=>{if(e.isTrusted){const b=e.target.closest?.('[data-testid]');if(b)debug('user.click',{testId:b.getAttribute('data-testid'),text:b.tagName==='BUTTON'?b.textContent:undefined,before:debugSnapshot()})}},true);
+  document.addEventListener('change',e=>{const id=e.target.getAttribute?.('data-testid');if(e.isTrusted&&id&&/amount|multiplier|profit|loss|limit|on-win|advanced/.test(id))debug('user.change',{testId:id,value:e.target.value,checked:e.target.checked,snapshot:debugSnapshot()})},true);
+  root.addEventListener('click',e=>{if(e.target.closest('button'))debug('tool.click',{id:e.target.closest('button').id,snapshot:debugSnapshot()})},true);
+  root.addEventListener('change',e=>debug('tool.config.change',{id:e.target.id,value:e.target.value}),true);
+  window.addEventListener('message',e=>{if(e.source!==window||e.origin!==location.origin||e.data?.type!=='limbo-debug-observer-v1')return;const d=e.data.entry;if(d&&typeof d.event==='string')debug('page.'+d.event,{...d.data,pageTime:d.pageTime},d.level||'info',d.trace)});
+  window.postMessage({type:'limbo-debug-ready-v1'},location.origin);
+  window.addEventListener('pagehide',()=>debug('page.hide',debugSnapshot()));
   const storageKey='limbo-auto-config-v2';
   const resumeKey='limbo-auto-reload-v2';
   const fields=Object.keys(defaults);
   const readConfig=()=>Object.fromEntries(fields.map(k=>[k,k.endsWith('Mode')?field(k).value:k==='amount'?money(field(k).value):numeric(field(k).value)]));
   function valid(c){return fields.every(k=>k.endsWith('Mode')?['reset','increase'].includes(c[k]):Number.isFinite(c[k]))&&c.amount>0&&Number(c.amount.toFixed(8))===c.amount&&c.tp>0&&c.sl>0&&c.amount<=c.sl&&c.target>=1.01&&c.target<=1000000&&c.win>=0&&c.loss>=0&&Number.isInteger(c.limit)&&c.limit>=0&&Number.isInteger(c.reload)&&c.reload>=0;}
   function showConfig(c){for(const k of fields)field(k).value=k==='amount'?c.amount.toFixed(8):c[k]??defaults[k];}
-  function saveConfig(){const c=readConfig();if(valid(c)&&typeof chrome!=='undefined'&&chrome.storage?.local)void chrome.storage.local.set({[storageKey]:c}).catch(()=>{});}
+  function saveConfig(){const c=readConfig();if(valid(c)&&typeof chrome!=='undefined'&&chrome.storage?.local)void chrome.storage.local.set({[storageKey]:c}).catch(error=>debug('config.save.error',{error,input:c},'error'));}
   for(const k of fields)field(k).addEventListener('change',saveConfig);
   const preview=()=>{const n=money(field('amount').value);field('amountPreview').textContent=Number.isFinite(n)&&n>0?`Mức bắt đầu: ${n.toFixed(8)} · cùng loại tiền đang chọn trên game`:'Nhập tiền dạng 0.001 hoặc 0.00001, tối đa 8 số lẻ.'};
   field('amount').addEventListener('input',preview);
-  if(typeof chrome!=='undefined'&&chrome.storage?.local){initialReady=false;chrome.storage.local.get(storageKey).then(s=>{if(s[storageKey]&&valid(s[storageKey]))showConfig(s[storageKey]);}).catch(()=>{}).finally(()=>{initialReady=true;restore()});}
+  if(typeof chrome!=='undefined'&&chrome.storage?.local){initialReady=false;chrome.storage.local.get(storageKey).then(s=>{if(s[storageKey]&&valid(s[storageKey]))showConfig(s[storageKey]);}).catch(error=>debug('config.load.error',{error},'error')).finally(()=>{initialReady=true;restore()});}
   function clearResume(){try{sessionStorage.removeItem(resumeKey)}catch{}}
   function off(t){endStats('other');state='OFF';reloadWanted=false;runningSeen=false;clearResume();for(const k of fields)field(k).disabled=false;field('toggle').textContent='Bắt đầu Auto';notice(t);}
   function arm(c,expected=''){
@@ -79,12 +93,13 @@
   field('reloadNow').onclick=()=>{if(state==='OFF')return notice('Bật Auto trước khi hẹn reload.');reloadWanted=true;notice('Đã hẹn reload khi lượt hoàn thành.');};
   function manual(event){if(!event.isTrusted||state==='OFF')return;const b=event.target.closest?.('[data-testid="auto-bet-button"], [data-testid="manual-tab"]');if(b&&(b.getAttribute('data-testid')==='manual-tab'||b.getAttribute('data-autobet-status')!=='start'))off('Bạn đã dừng hoặc chuyển Thủ công; tool đã tắt.');}
   document.addEventListener('click',manual,true);
-  const action=(fn)=>{if(Date.now()-lastAction<750)return false;lastAction=Date.now();stableAt=0;readyAt=0;fn();return true;};
+  const action=(fn)=>{if(Date.now()-lastAction<750)return false;lastAction=Date.now();stableAt=0;readyAt=0;const trace=crypto.randomUUID();debug('dom.action.input',{snapshot:debugSnapshot()},'info',trace);try{fn();debug('dom.action.output',{snapshot:debugSnapshot()},'info',trace);return true}catch(error){debug('dom.action.error',{error,snapshot:debugSnapshot()},'error',trace);throw error}};
   const write=(input,n)=>{
     const text=input.getAttribute('data-testid')==='input-game-amount'?n.toFixed(8):String(n);
+    debug('dom.write.input',{testId:input.getAttribute('data-testid'),before:input.value,input:text});
     input.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,text);
     input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertReplacementText',data:text}));
-    input.dispatchEvent(new Event('change',{bubbles:true}));input.blur();
+    input.dispatchEvent(new Event('change',{bubbles:true}));input.blur();debug('dom.write.output',{testId:input.getAttribute('data-testid'),output:input.value,valid:input.validity?.valid});
   };
   function validNative(input){
     if(input.checkValidity())return true;
@@ -95,7 +110,7 @@
       Number.isFinite(numeric(input.value))&&numeric(input.value)>=0&&
       !['badInput','customError','patternMismatch','rangeOverflow','rangeUnderflow','tooLong','tooShort','typeMismatch','valueMissing'].some(k=>v[k]);
   }
-  function reload(){try{sessionStorage.setItem(resumeKey,JSON.stringify({config,currency:identity,time:Date.now()}));state='RELOADING';notice('Đang tải lại trang…');location.reload();}catch{off('Không lưu được trạng thái reload; tool đã tắt.');}}
+  function reload(){try{sessionStorage.setItem(resumeKey,JSON.stringify({config,currency:identity,time:Date.now()}));state='RELOADING';notice('Đang tải lại trang…');location.reload();}catch(error){debug('reload.error',{error},'error');off('Không lưu được trạng thái reload; tool đã tắt.');}}
   setInterval(()=>{
     if(state==='OFF'||state==='RELOADING')return;
     if(!isLimbo())return off('Đã rời trang Limbo; tool đã tắt.');
@@ -158,14 +173,21 @@
     if(reloadWanted&&runningSeen)return reload();
     const finalAmount=one('input-game-amount');
     if(!finalAmount||money(finalAmount.value)!==config.amount)return off('Tiền cược không khớp chính xác; không bắt đầu.');
-    startStats();state='WAIT_START';startedAt=Date.now();stableAt=0;readyAt=0;cycles++;notice(`Đã kiểm tra mức bắt đầu ${config.amount.toFixed(8)} · đang bắt đầu Auto…`);button.click();
+    startStats();state='WAIT_START';startedAt=Date.now();stableAt=0;readyAt=0;cycles++;notice(`Đã kiểm tra mức bắt đầu ${config.amount.toFixed(8)} · đang bắt đầu Auto…`);debug('auto.start.input',{snapshot:debugSnapshot()},'info',statCycle);button.click();debug('auto.start.output',{snapshot:debugSnapshot()},'info',statCycle);
   },250);
   if(typeof chrome!=='undefined'&&chrome.runtime?.onMessage)chrome.runtime.onMessage.addListener((m,_s,reply)=>{
+    if(m.type==='limbo-monitor'){
+      const amount=one('input-game-amount');
+      reply({state,status:status.textContent,ready:initialReady,cycles,config:readConfig(),amount:amount?money(amount.value):null,wallet:walletSnapshot(),time:Date.now()});
+      return;
+    }
     if(m.type!=='limbo-panel')return;
+    const trace=crypto.randomUUID();if(m.action||m.config)debug('panel.command.input',{message:m,before:debugSnapshot()},'info',trace);
     if(m.config&&state==='OFF')for(const k of fields)if(k in m.config)field(k).value=k==='amount'&&typeof m.config[k]==='number'?m.config[k].toFixed(8):m.config[k];
     preview();
     if(m.action==='save')saveConfig();
     if(['toggle','reloadNow','telegram'].includes(m.action))field(m.action).click();
+    if(m.action||m.config)debug('panel.command.output',{snapshot:debugSnapshot()},'info',trace);
     reply({html:root.innerHTML,config:readConfig(),disabled:state!=='OFF',status:status.textContent,toggle:field('toggle').textContent,ready:initialReady});
   });
 })();
