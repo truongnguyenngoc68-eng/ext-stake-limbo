@@ -12,15 +12,18 @@ test('Monitor reads all tabs, isolates disconnected tabs and opening a card send
   calls.push({id,...m});
   if(m.type==='limbo-monitor'){
    if(id===2)throw Error('Disconnected');
-   return {state:id===1?'RUNNING':'OFF',cycles:4,config:{target:250},amount:.0004,status:'<b>status</b>',wallet:{currency:'usdt',displayedStats:{profit:-.1,volume:2}}};
+   return {state:'OFF',native:{state:id===1?'RUNNING':'IDLE'},observerVersion:id===3?'1.5.1':'1.5.2',cycles:4,config:{target:250},amount:.0004,status:'<b>status</b>',wallet:{currency:'usdt',displayedStats:{profit:-.1,volume:2}}};
   }
   return {html:'<section><input id="amount"><output></output><button id="toggle"></button></section>',config:{amount:.0004},ready:true,status:'Ready',toggle:'Stop'};
  }},storage:{onChanged:event},runtime:{getManifest:()=>({version:'1.5.2'}),openOptionsPage(){}}};
  w.eval(read('options-monitor.js'));w.eval('void updateMonitor()');await new Promise(r=>setTimeout(r,30));
  assert.equal(w.document.querySelectorAll('.tab-card').length,3);
- assert.match(w.document.getElementById('monitorCount').textContent,/3 tab · 1 đang chạy/);
+ assert.match(w.document.getElementById('monitorCount').textContent,/3 tab · 1 game đang chạy/);
  assert.match(w.document.querySelectorAll('.tab-card')[1].textContent,/Mất kết nối/);
  assert.equal(w.document.querySelector('.card-status b'),null);
+ assert.match(w.document.querySelector('.tab-card .badge').textContent,/Game đang chạy/);
+ assert.match(w.document.querySelector('.tool-status').textContent,/Tool đã tắt/);
+ assert.match(w.document.querySelectorAll('.tab-card')[2].textContent,/F5 tab để đồng bộ/);
  w.document.querySelectorAll('.card-head button')[2].click();await new Promise(r=>setTimeout(r,30));
  assert.equal(opened,3);assert.equal(focused,9);assert.equal(w.document.querySelector('#app'),null);
  assert.ok(calls.every(m=>!m.action));

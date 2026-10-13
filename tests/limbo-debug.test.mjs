@@ -53,3 +53,20 @@ test('Logger retries unacknowledged events in order without letting transport fa
  await new Promise(r=>setImmediate(r));assert.match(ctx.__limboLogFailure,/Worker unavailable/);assert.equal(entries.length,0);
  down=false;timers.shift()();await new Promise(r=>setImmediate(r));assert.deepEqual(entries.map(e=>e.event),['context.start','action.input']);
 });
+
+test('Live journal renders without a file and safely filters errors',async()=>{
+ const dom=new JSDOM(read('debug.html'),{runScripts:'outside-only'}),w=dom.window;
+ w.setInterval=()=>0;w.setTimeout=()=>0;
+ w.LimboJournal={recent:async()=>[{id:2,event:'<unsafe>',level:'error',time:new Date().toISOString(),data:{amount:1}},{id:1,event:'normal',level:'info',time:new Date().toISOString()}]};
+ w.updateMonitor=()=>{};w.chrome={runtime:{sendMessage:async()=>({ok:true})}};
+ w.eval('let enabled=false,handle=null;');w.eval(read('debug-monitor.js'));
+ await new Promise(r=>setImmediate(r));
+ assert.equal(w.document.querySelectorAll('#eventList details').length,2);
+ assert.equal(w.document.querySelector('#eventList summary').textContent.includes('<unsafe>'),true);
+ assert.equal(w.document.querySelector('#eventList unsafe'),null);
+ w.document.getElementById('errorsOnly').checked=true;w.document.getElementById('errorsOnly').onchange();
+ assert.equal(w.document.querySelectorAll('#eventList details').length,1);
+ assert.match(w.document.getElementById('latest').textContent,/unsafe/);
+ assert.match(w.document.getElementById('journalHealth').textContent,/Worker đã kết nối/);
+ dom.window.close();
+});

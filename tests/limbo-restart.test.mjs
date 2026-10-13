@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {JSDOM,VirtualConsole} from 'jsdom';
 const code=readFileSync(new URL('../limbo-tool/content.js',import.meta.url),'utf8');
-function fixture({manual=false,advanced=false,resume=null,remote=false}={}){
+function fixture({manual=false,advanced=false,resume=null,remote=false,logging=false}={}){
  const dom=new JSDOM(`<button data-testid="manual-tab">Thủ công</button><button data-testid="auto-tab">Tự động</button><button data-testid="auto-bet-button" data-autobet-status="start">Bắt Đầu Cược Tự Động</button><input type="number" data-testid="input-game-amount" data-bet-amount-active-currency="usdt" value="0"><input type="checkbox" data-testid="advanced-toggle-status-disabled"><div id="advanced"><input type="number" data-testid="stop-on-profit-input" value="0"><input type="number" data-testid="stop-on-loss-input" value="0"><input type="number" data-testid="limit-input" value="0"><button data-testid="reset-on-win-button">Reset</button><button data-testid="enable-on-win-button">Increase</button><input type="number" data-testid="on-win-input" value="0" disabled><button data-testid="reset-on-loss-button">Reset</button><button data-testid="enable-on-loss-button">Increase</button><input type="number" data-testid="on-loss-input" value="0" disabled></div><input type="number" data-testid="target-multiplier" value="2">`,{url:'https://stake1022.com/vi/casino/games/limbo',runScripts:'outside-only',virtualConsole:new VirtualConsole()});
  const statsPanel=dom.window.document.createElement('div');statsPanel.innerHTML='<button data-testid="button-liveStats" data-active="true"></button><span data-testid="bets-stats-wagered">0</span><span data-testid="bets-stats-profit">0</span>';dom.window.document.body.append(statsPanel);
- const w=dom.window;let tick,time=1000,manualListener;const submissions=[],stops=[];
+ const w=dom.window;const logs=[];if(logging)w.LimboLog={emit:(event,data,level,trace)=>logs.push({event,data,level,trace}),setSnapshot(){}};let tick,time=1000,manualListener;const submissions=[],stops=[];
  const listeners=[];if(remote)w.chrome={runtime:{onMessage:{addListener:fn=>listeners.push(fn)},sendMessage:async()=>({})}};
  for(const id of ['input-game-amount','stop-on-profit-input','stop-on-loss-input'])w.document.querySelector(`[data-testid="${id}"]`).step='0.00000001';
  w.document.querySelector('[data-testid="target-multiplier"]').step='0.01';
@@ -26,7 +26,7 @@ function fixture({manual=false,advanced=false,resume=null,remote=false}={}){
  };
  if(resume)w.sessionStorage.setItem('limbo-auto-reload-v2',JSON.stringify(resume));
  w.eval(code);const panel=w.document.querySelector('#limbo-restart-tool').shadowRoot;
- return {dom,w,one,button,input,panel,submissions,stops,running,complete,remote:m=>{let result;for(const fn of listeners)fn(m,{},r=>{result=r});return result},click:()=>panel.querySelector('#toggle').click(),advance:(ms=250)=>{time+=ms;tick()},pump:(steps=100)=>{for(let i=0;i<steps;i++){time+=250;tick()}},until:(n)=>{for(let i=0;i<130&&submissions.length<n;i++){time+=250;tick()}},manualStop:()=>{manualListener({isTrusted:true,target:button});button.click()},field:(id,v)=>{panel.querySelector('#'+id).value=v},status:()=>panel.querySelector('output').textContent};
+ return {logs,dom,w,one,button,input,panel,submissions,stops,running,complete,remote:m=>{let result;for(const fn of listeners)fn(m,{},r=>{result=r});return result},click:()=>panel.querySelector('#toggle').click(),advance:(ms=250)=>{time+=ms;tick()},pump:(steps=100)=>{for(let i=0;i<steps;i++){time+=250;tick()}},until:(n)=>{for(let i=0;i<130&&submissions.length<n;i++){time+=250;tick()}},manualStop:()=>{manualListener({isTrusted:true,target:button});button.click()},field:(id,v)=>{panel.querySelector('#'+id).value=v},status:()=>panel.querySelector('output').textContent};
 }
 const verify=s=>{assert.equal(s.amount,.001);assert.equal(s.tp,1.1);assert.equal(s.sl,1);assert.equal(s.target,9);assert.equal(s.winReset,true);assert.equal(s.lossReset,false);assert.equal(s.loss,14)};
 for(const count of [1,2,3,5,10])for(const scenario of ['TP','SL','wrongTP','wrongSL','blank','disabled','rejected'])test(`Auto verification ${scenario} over ${count} rounds`,()=>{
@@ -72,15 +72,15 @@ test('Stop request retries when game button was temporarily disabled',()=>{const
 test('No overlay is displayed on the game',()=>{const f=fixture();try{assert.equal(f.w.document.querySelector('#limbo-restart-tool').style.display,'none')}finally{f.dom.window.close()}});
 test('Duplicate script cannot create a second controller',()=>{const f=fixture();try{f.w.eval(code);assert.equal(f.w.document.querySelectorAll('#limbo-restart-tool').length,1)}finally{f.dom.window.close()}});
 
-async function panelFixture(){
+async function panelFixture({disconnect=0}={}){
  const core=fixture({manual:true,remote:true});
  const ui=new JSDOM(readFileSync(new URL('../limbo-tool/panel.html',import.meta.url),'utf8'),{runScripts:'outside-only'});
- const w=ui.window;let poll;const sent=[];
+ const w=ui.window;let poll,injections=0;const sent=[];
  const event={addListener(){}};
- w.chrome={tabs:{query:async()=>[{id:10,active:true,url:'https://stake1022.com/vi/casino/games/limbo'}],onRemoved:event,onUpdated:event,sendMessage:async(id,message)=>{sent.push({id,message});await new Promise(r=>setImmediate(r));return core.remote(message)}}};
- w.chrome.storage={local:{get:async()=>({})},onChanged:{addListener(){}}};w.chrome.runtime={openOptionsPage(){}};w.eval(readFileSync(new URL('../limbo-tool/domains.js',import.meta.url),'utf8'));w.setInterval=(fn,ms)=>{if(ms===750)poll=fn};w.eval(readFileSync(new URL('../limbo-tool/panel.js',import.meta.url),'utf8'));
+ w.chrome={tabs:{query:async()=>[{id:10,active:true,url:'https://stake1022.com/vi/casino/games/limbo'}],onRemoved:event,onUpdated:event,sendMessage:async(id,message)=>{sent.push({id,message});await new Promise(r=>setImmediate(r));if(disconnect-->0)throw Error('Could not establish connection. Receiving end does not exist.');return core.remote(message)}}};
+ w.chrome.scripting={executeScript:async({target,files})=>{injections++;assert.equal(target.tabId,10);assert.deepEqual(Array.from(files),['debug-log.js','content.js'])}};w.chrome.storage={local:{get:async()=>({})},onChanged:{addListener(){}}};w.chrome.runtime={openOptionsPage(){}};w.eval(readFileSync(new URL('../limbo-tool/domains.js',import.meta.url),'utf8'));w.setInterval=(fn,ms)=>{if(ms===750)poll=fn};w.eval(readFileSync(new URL('../limbo-tool/panel.js',import.meta.url),'utf8'));
  const flush=async()=>{for(let i=0;i<8;i++)await new Promise(r=>setImmediate(r))};await flush();
- return {core,ui,w,sent,flush,poll:()=>poll(),close(){core.dom.window.close();ui.window.close()}};
+ return {core,ui,w,sent,get injections(){return injections},flush,poll:()=>poll(),close(){core.dom.window.close();ui.window.close()}};
 }
 test('Side panel mounts independent controls and starts selected tab with verified SL',async()=>{
  const f=await panelFixture();try{
@@ -169,3 +169,36 @@ test('Each restart rechecks statistics and reopens a panel closed between cycles
   f.until(2);assert.equal(opened,1);assert.equal(f.submissions.length,2);
  }finally{f.dom.window.close()}
 });
+
+for(let i=0;i<50;i++)test('Stop diagnostics capture failed gate '+(i+1),()=>{const f=fixture({logging:true,advanced:true});try{const id=['stop-on-loss-input','stop-on-profit-input','on-loss-input','limit-input','target-multiplier'][i%5];f.one(id).remove();f.click();f.pump(150);const stop=f.logs.find(e=>e.event==='tool.stop');assert.ok(stop);assert.equal(stop.data.before.state,'PREPARE');assert.equal(stop.level,'error');assert.ok(stop.data.diagnostics.failed.some(c=>c.code.includes(id)||id==='on-loss-input'&&c.code==='mode.loss'));const after=f.logs.find(e=>e.event==='tool.stopped');assert.equal(after.data.after.state,'OFF');assert.equal(after.trace,stop.trace);assert.equal(f.submissions.length,0);}finally{f.dom.window.close()}});
+test('Native idle logs unknown reason without claiming TP or SL',()=>{const f=fixture({logging:true});try{f.click();f.until(1);f.advance();f.complete();f.advance();const log=f.logs.find(e=>e.event==='native.idle.detected');assert.ok(log);assert.equal(log.data.reason,'unconfirmed');assert.equal(log.data.snapshot.state,'RUNNING');assert.ok(log.data.diagnostics);}finally{f.dom.window.close()}});
+
+test('Monitor and panel report native Auto running separately after the tool is turned off',()=>{
+ const f=fixture({remote:true});try{
+  f.click();f.until(1);f.advance();f.click();
+  const monitor=f.remote({type:'limbo-monitor'}),panel=f.remote({type:'limbo-panel'});
+  assert.equal(monitor.state,'OFF');assert.equal(monitor.native.state,'RUNNING');assert.equal(monitor.toolEnabled,false);
+  assert.match(monitor.status,/Game Auto vẫn chạy/);assert.match(panel.status,/Game Auto vẫn chạy/);
+  const count=f.submissions.length;f.pump(50);assert.equal(f.submissions.length,count);
+  f.complete();assert.equal(f.remote({type:'limbo-monitor'}).native.state,'IDLE');
+ }finally{f.dom.window.close()}
+});
+test('An externally started game is observed while the tool stays off and cannot be silently adopted',()=>{
+ const f=fixture({remote:true});try{
+  f.running();const count=f.submissions.length;
+  assert.equal(f.remote({type:'limbo-monitor'}).native.state,'RUNNING');f.click();f.pump(10);
+  assert.equal(f.remote({type:'limbo-monitor'}).state,'OFF');assert.equal(f.submissions.length,count);assert.equal(f.stops.length,0);
+  assert.match(f.status(),/game đang chạy/);
+ }finally{f.dom.window.close()}
+});
+test('Native state normalizes label whitespace and reports conflicting or duplicate controls as unknown',()=>{
+ const f=fixture({remote:true});try{
+  f.running();f.button.textContent=' Dừng  Cược\n Tự  Động ';
+  assert.equal(f.remote({type:'limbo-monitor'}).native.state,'RUNNING');
+  f.button.setAttribute('data-autobet-status','start');assert.equal(f.remote({type:'limbo-monitor'}).native.state,'UNKNOWN');
+  f.complete();f.w.document.body.append(f.button.cloneNode(true));assert.equal(f.remote({type:'limbo-monitor'}).native.state,'UNKNOWN');
+ }finally{f.dom.window.close()}
+});
+
+test('Side panel reconnects to same tab without page reload and never replays a betting command',async()=>{const f=await panelFixture({disconnect:1});try{assert.equal(f.injections,1);assert.equal(f.w.document.querySelector('#tabs').value,'10');assert.match(f.w.document.querySelector('#connection').textContent,/Đã kết nối/);assert.equal(f.core.submissions.length,0);assert.equal(f.sent.length,2);assert.ok(f.sent.every(x=>!x.message.action));}finally{f.close()}});
+test('Disconnected panel keeps controls disabled and reports failed reconnect',async()=>{const f=await panelFixture({disconnect:100});try{assert.equal(f.injections,1);assert.match(f.w.document.querySelector('#connection').textContent,/mất kết nối/);f.poll();await f.flush();assert.equal(f.injections,1);assert.equal(f.core.submissions.length,0);}finally{f.close()}});

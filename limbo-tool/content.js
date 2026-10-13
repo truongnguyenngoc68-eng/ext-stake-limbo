@@ -54,9 +54,38 @@
   const field=id=>root.querySelector('#'+id),status=root.querySelector('output');
   let state='OFF',config=null,startedAt=0,lastAction=0,stableAt=0,readyAt=0,runningSeen=false,cycles=0,identity='',reloadAt=0,reloadWanted=false,initialReady=true,statsRequestedAt=0;
   const debug=(event,data={},level='info',trace)=>globalThis.LimboLog?.emit(event,data,level,trace);
+  function nativeAuto(){
+    const buttons=[...document.querySelectorAll('[data-testid="auto-bet-button"]')].filter(visible);
+    const button=buttons.length===1?buttons[0]:null;
+    const text=button?.textContent.replace(/\s+/g,' ').trim()||'',attribute=button?.getAttribute('data-autobet-status')??null;
+    const running=/Dừng Cược Tự Động|Stop Autobet/i.test(text),idle=/Bắt Đầu Cược Tự Động|Start Autobet/i.test(text);
+    return {state:button&&running&&attribute!=='start'?'RUNNING':button&&idle&&attribute==='start'?'IDLE':'UNKNOWN',text,attribute,disabled:button?.disabled??null,count:buttons.length};
+  }
+  function presentation(){
+    const native=nativeAuto(),toolEnabled=state!=='OFF';
+    const summary=native.state==='RUNNING'?(toolEnabled?'Game Auto đang chạy':'Game Auto vẫn chạy · tool đã tắt'):native.state==='IDLE'?(toolEnabled?'Game đang nghỉ · tool '+state:'Game đã dừng · tool đã tắt'):'Chưa xác nhận trạng thái game · tool '+state;
+    return {native,toolEnabled,status:summary+' | '+status.textContent};
+  }
+  function diagnosticChecks(){
+    const checks=[];const add=(code,ok,actual,expected)=>checks.push({code,ok,actual,expected});
+    const button=one('auto-bet-button'),advanced=[...document.querySelectorAll('input[data-testid^="advanced-toggle-status-"]')].filter(visible);
+    add('button.present',!!button,!!button,true);
+    add('button.enabled',!!button&&!button.disabled,button?.disabled,false);
+    add('button.idle',button?.getAttribute('data-autobet-status')==='start',button?.getAttribute('data-autobet-status'),'start');
+    add('statistics.visible',!!walletSnapshot().displayedStats,!!walletSnapshot().displayedStats,true);
+    add('advanced.unique',advanced.length===1,advanced.length,1);
+    add('advanced.checked',advanced.length===1&&advanced[0].checked,advanced[0]?.checked,true);
+    add('currency.known',!!identity,identity,'nonempty');
+    if(config){const settings=[['input-game-amount',config.amount],['stop-on-profit-input',config.tp],['stop-on-loss-input',config.sl],['target-multiplier',config.target],['limit-input',config.limit]];
+      for(const side of ['win','loss']){const input=one(`on-${side}-input`),want=config[side+'Mode']==='increase';add(`mode.${side}`,!!input&&input.disabled!==want,input?.disabled,want?'increase':'reset');for(const prefix of ['reset','enable'])add(`mode.${side}.${prefix}.present`,!!one(`${prefix}-on-${side}-button`),!!one(`${prefix}-on-${side}-button`),true);if(want)settings.push([`on-${side}-input`,config[side]]);}
+      for(const [id,n]of settings){const e=one(id);add(id+'.present',!!e,!!e,true);add(id+'.enabled',!!e&&!e.disabled,e?.disabled,false);add(id+'.value',!!e&&Number.isFinite(numeric(e.value))&&Math.abs(numeric(e.value)-n)<=1e-10,e?.value,n);if(e?.validity){const flags=Object.fromEntries(['valid','stepMismatch','badInput','customError','patternMismatch','rangeOverflow','rangeUnderflow','tooLong','tooShort','typeMismatch','valueMissing'].map(k=>[k,e.validity[k]]));const implicitPercent=['on-win-input','on-loss-input'].includes(id)&&e.getAttribute('step')===null&&flags.stepMismatch&&Number.isFinite(numeric(e.value))&&numeric(e.value)>=0&&!Object.entries(flags).some(([k,v])=>!['valid','stepMismatch'].includes(k)&&v);add(id+'.validity',flags.valid||implicitPercent,{flags,step:e.getAttribute('step'),min:e.min,max:e.max,message:e.validationMessage,implicitPercent},'accepted');}}
+      const amount=one('input-game-amount');add('amount.exact',!!amount&&money(amount.value)===config.amount,amount?.value,config.amount);
+    }
+    return {elapsed:Date.now()-startedAt,readyAge:readyAt?Date.now()-readyAt:null,lastActionAge:Date.now()-lastAction,checks,failed:checks.filter(c=>!c.ok)};
+  }
   function debugSnapshot(){
     const ids=['input-game-amount','target-multiplier','stop-on-profit-input','stop-on-loss-input','limit-input','on-win-input','on-loss-input','auto-bet-button'];
-    return {state,config,cycles,identity,reloadWanted,reloadAt,statCycle,startedAt,lastAction,stableAt,readyAt,runningSeen,initialReady,status:status.textContent,wallet:walletSnapshot(),seeds:[...document.querySelectorAll('[data-testid*="seed" i]')].filter(visible).slice(0,30).map(e=>({id:e.getAttribute('data-testid'),value:e.value??e.textContent?.slice(0,2000)})),game:Object.fromEntries(ids.map(id=>{const e=one(id);return [id,e?{value:e.value,text:e.tagName==='BUTTON'?e.textContent:undefined,disabled:e.disabled,autoStatus:e.getAttribute('data-autobet-status'),valid:e.validity?{valid:e.validity.valid,stepMismatch:e.validity.stepMismatch,rangeUnderflow:e.validity.rangeUnderflow,rangeOverflow:e.validity.rangeOverflow}:null}:null]}))};
+    return {native:nativeAuto(),diagnostics:diagnosticChecks(),alerts:[...document.querySelectorAll('[role="alert"]')].filter(visible).map(e=>e.textContent.slice(0,1000)),visibility:document.visibilityState,state,config,cycles,identity,reloadWanted,reloadAt,statCycle,startedAt,lastAction,stableAt,readyAt,runningSeen,initialReady,status:status.textContent,wallet:walletSnapshot(),seeds:[...document.querySelectorAll('[data-testid*="seed" i]')].filter(visible).slice(0,30).map(e=>({id:e.getAttribute('data-testid'),value:e.value??e.textContent?.slice(0,2000)})),game:Object.fromEntries(ids.map(id=>{const e=one(id);return [id,e?{value:e.value,text:e.tagName==='BUTTON'?e.textContent:undefined,disabled:e.disabled,autoStatus:e.getAttribute('data-autobet-status'),valid:e.validity?{valid:e.validity.valid,stepMismatch:e.validity.stepMismatch,rangeUnderflow:e.validity.rangeUnderflow,rangeOverflow:e.validity.rangeOverflow}:null}:null]}))};
   }
   globalThis.LimboLog?.setSnapshot(debugSnapshot);
   const notice=t=>{const changed=status.textContent!==t;status.textContent=t;if(changed)debug('state.notice',{output:t,snapshot:debugSnapshot()},/lỗi|không xác nhận|không hợp lệ|không đúng|không khớp|mất trạng thái/i.test(t)?'error':'info')};
@@ -80,14 +109,14 @@
   field('amount').addEventListener('input',preview);
   if(typeof chrome!=='undefined'&&chrome.storage?.local){initialReady=false;chrome.storage.local.get(storageKey).then(s=>{if(s[storageKey]&&valid(s[storageKey]))showConfig(s[storageKey]);}).catch(error=>debug('config.load.error',{error},'error')).finally(()=>{initialReady=true;restore()});}
   function clearResume(){try{sessionStorage.removeItem(resumeKey)}catch{}}
-  function off(t){endStats('other');state='OFF';reloadWanted=false;runningSeen=false;clearResume();for(const k of fields)field(k).disabled=false;field('toggle').textContent='Bắt đầu Auto';notice(t);}
+  function off(t){const trace=crypto.randomUUID();debug('tool.stop',{reason:t,before:debugSnapshot(),diagnostics:diagnosticChecks()},'error',trace);endStats('other');state='OFF';reloadWanted=false;runningSeen=false;clearResume();for(const k of fields)field(k).disabled=false;field('toggle').textContent='Bắt đầu Auto';notice(t);debug('tool.stopped',{reason:t,after:debugSnapshot()},'info',trace);}
   function arm(c,expected=''){
     statsRequestedAt=0;config=c;identity=expected;state='PREPARE';startedAt=Date.now();lastAction=0;stableAt=0;readyAt=0;runningSeen=false;reloadWanted=false;
     reloadAt=c.reload>0?Date.now()+c.reload*60000:0;for(const k of fields)field(k).disabled=true;field('toggle').textContent='Tắt Auto / chạy lại';notice('Đang mở Tự động và Nâng cao…');
   }
   function restore(){let saved;try{saved=JSON.parse(sessionStorage.getItem(resumeKey)||'null')}catch{}clearResume();if(!saved||!valid(saved.config)||Date.now()-saved.time>300000||Date.now()<saved.time||!isLimbo())return;showConfig(saved.config);arm(saved.config,saved.currency);notice('Sau reload: đang kiểm tra game trước khi chạy tiếp…');}
   if(initialReady)restore();
-  field('toggle').onclick=()=>{if(state==='STOPPING')return notice('Đang yêu cầu dừng game do TP/SL không đúng; chờ xác nhận.');if(state!=='OFF')return off('Đã tắt tool; lượt đang chạy trên game vẫn tiếp tục.');if(!initialReady)return notice('Đang tải cấu hình…');const c=readConfig();if(!valid(c))return notice('Tiền cược phải > 0 và ≤ SL; TP/SL phải > 0. Kiểm tra mục tiêu, %, số cược và reload.');if(!isLimbo())return notice('Mở trang Limbo trước.');saveConfig();cycles=0;arm(c);};
+  field('toggle').onclick=()=>{if(state==='STOPPING')return notice('Đang yêu cầu dừng game do TP/SL không đúng; chờ xác nhận.');if(state!=='OFF')return off('Đã tắt tool; lượt đang chạy trên game vẫn tiếp tục.');if(!initialReady)return notice('Đang tải cấu hình…');const c=readConfig();if(!valid(c))return notice('Tiền cược phải > 0 và ≤ SL; TP/SL phải > 0. Kiểm tra mục tiêu, %, số cược và reload.');if(!isLimbo())return notice('Mở trang Limbo trước.');if(one('auto-bet-button')&&nativeAuto().state!=='IDLE')return notice('Chưa thể bật tool: game đang chạy hoặc chưa xác nhận dừng. Chờ / dừng Auto trên game rồi bật lại.');saveConfig();cycles=0;arm(c);};
   field('collapse').onclick=()=>{const hidden=!field('extra').hidden;for(const e of root.querySelectorAll('.body'))e.hidden=hidden;field('collapse').textContent=hidden?'Mở rộng':'Thu gọn'};
   field('telegram').onclick=()=>chrome.runtime.sendMessage({type:'open-options'});
   field('reloadNow').onclick=()=>{if(state==='OFF')return notice('Bật Auto trước khi hẹn reload.');reloadWanted=true;notice('Đã hẹn reload khi lượt hoàn thành.');};
@@ -131,8 +160,9 @@
     const currentCurrency=amount?.getAttribute('data-bet-amount-active-currency');
     if(currentCurrency){if(identity&&identity!==currentCurrency)return off('Đã đổi loại tiền; tool đã tắt.');identity=currentCurrency;}
     const button=one('auto-bet-button');
-    const running=button&&/Dừng Cược Tự Động|Stop Autobet/i.test(button.textContent);
-    const idle=button?.getAttribute('data-autobet-status')==='start'&&/Bắt Đầu Cược Tự Động|Start Autobet/i.test(button.textContent);
+    const native=nativeAuto();
+    const running=native.state==='RUNNING';
+    const idle=native.state==='IDLE';
     if(state==='STOPPING'){
       if(idle&&!button.disabled)return off('Đã dừng game do cấu hình TP/SL không còn đúng.');
       if(running&&!button.disabled)action(()=>button.click());
@@ -149,7 +179,7 @@
     if(state==='WAIT_START'){if(Date.now()-startedAt>10000)return off('Không xác nhận được Auto bắt đầu; không bấm lại.');return;}
     if(state==='RUNNING'){
       if(!idle||button.disabled){if(!stableAt)stableAt=Date.now();if(Date.now()-stableAt>30000)off('Mất trạng thái game; tool đã tắt.');return;}
-      state='WAIT_IDLE';stableAt=Date.now();notice('Lượt hoàn thành · chờ 2 giây');return;
+      debug('native.idle.detected',{reason:'unconfirmed',snapshot:debugSnapshot(),diagnostics:diagnosticChecks()},'warn',statCycle);state='WAIT_IDLE';stableAt=Date.now();notice('Lượt hoàn thành · chờ 2 giây');return;
     }
     if(state==='WAIT_IDLE'){
       if(!idle||button.disabled){stableAt=Date.now();return;}
@@ -192,7 +222,7 @@
   if(typeof chrome!=='undefined'&&chrome.runtime?.onMessage)chrome.runtime.onMessage.addListener((m,_s,reply)=>{
     if(m.type==='limbo-monitor'){
       const amount=one('input-game-amount');
-      reply({state,status:status.textContent,ready:initialReady,cycles,config:readConfig(),amount:amount?money(amount.value):null,wallet:walletSnapshot(),time:Date.now()});
+      reply({state,...presentation(),reason:status.textContent,observerVersion:globalThis.chrome?.runtime?.getManifest?.().version,ready:initialReady,cycles,config:readConfig(),amount:amount?money(amount.value):null,wallet:walletSnapshot(),time:Date.now()});
       return;
     }
     if(m.type!=='limbo-panel')return;
@@ -202,6 +232,6 @@
     if(m.action==='save')saveConfig();
     if(['toggle','reloadNow','telegram'].includes(m.action))field(m.action).click();
     if(m.action||m.config)debug('panel.command.output',{snapshot:debugSnapshot()},'info',trace);
-    reply({html:root.innerHTML,config:readConfig(),disabled:state!=='OFF',status:status.textContent,toggle:field('toggle').textContent,ready:initialReady});
+    reply({html:root.innerHTML,config:readConfig(),disabled:state!=='OFF',...presentation(),reason:status.textContent,toggle:field('toggle').textContent,ready:initialReady});
   });
 })();

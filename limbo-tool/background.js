@@ -42,6 +42,7 @@ chrome.runtime.onMessage.addListener((m,sender,reply)=>{if(m.type!=='stake-domai
 async function saveDebug(entry,sender){
  try{
   const id=await LimboJournal.append({...LimboLog.clean(entry),tabId:sender?.tab?.id??null,frameId:sender?.frameId??null,receivedAt:new Date().toISOString()});
+  await chrome.storage.local.set({limboDebugHealth:{error:null,time:Date.now(),id}});
   return {ok:true,id};
  }catch(error){
   await chrome.storage.local.set({limboDebugHealth:{error:String(error?.stack||error),time:Date.now()}}).catch(()=>{});
@@ -51,6 +52,7 @@ async function saveDebug(entry,sender){
 LimboLog.setSink(entry=>saveDebug(entry));
 LimboLog.emit('worker.ready',{version:chrome.runtime.getManifest().version});
 chrome.runtime.onMessage.addListener((m,sender,reply)=>{
+ if(m.type==='limbo-debug-health'&&sender.id===chrome.runtime.id){reply({ok:true,time:Date.now()});return;}
  if(m.type!=='limbo-debug-log'||sender.id!==chrome.runtime.id)return;
  if(!m.entry||typeof m.entry.event!=='string'){reply({ok:false,error:'Invalid log entry'});return;}
  saveDebug(m.entry,sender).then(reply);return true;
