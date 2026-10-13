@@ -15,8 +15,17 @@ function renderHistory(){const list=$('historyList');list.replaceChildren();cons
 for(const r of rows.slice(0,shown)){const card=element('article','','session'),head=element('div','','session-head');head.append(element('h3','Tab '+r.tab),element('span',r.status==='open'?'Đang mở':'Đã đóng','badge '+r.status));card.append(head,element('p',date(r.started)+' → '+(r.closed?date(r.closed):'Hiện tại'),'hint'));const metrics=element('div','','metrics');for(const [label,n]of [['Vol',r.volume],['Lãi/lỗ',r.profit]]){const box=element('div','');box.append(element('span',label+(r.currency?' · '+r.currency:'')));const val=element('strong',r.last?Number(n).toFixed(8):'—',label==='Lãi/lỗ'?(n<0?'negative':'positive'):'');box.append(val);metrics.append(box)}card.append(metrics);card.append(element('p',r.last?'Đo gần nhất '+date(r.last.time):'Chưa đọc được bảng thống kê','hint'));if(r.missing||r.resets)card.append(element('p',[r.missing?'Có khoảng thiếu dữ liệu':'',r.resets?r.resets+' lần đặt lại thống kê':''].filter(Boolean).join(' · '),'hint'));list.append(card);}
 if(rows.length>shown){const more=element('button','Xem thêm','more');more.onclick=()=>{shown+=50;renderHistory()};list.append(more)}}
 async function loadHistory(){try{const {limboHistory}=await chrome.storage.local.get('limboHistory');historyRows=limboHistory?.sessions||[];renderHistory();$('historyStatus').textContent='Lưu trên máy · số liệu từ lúc bắt đầu ghi nhận đến lần đo cuối.';}catch{$('historyStatus').textContent='Không đọc được lịch sử.'}}
-function showHistory(yes){$('history').hidden=!yes;$('settings').hidden=yes;$('historyTab').classList.toggle('selected',yes);$('settingsTab').classList.toggle('selected',!yes);if(yes)loadHistory();}
-$('settingsTab').onclick=()=>showHistory(false);$('historyTab').onclick=()=>showHistory(true);$('refresh').onclick=loadHistory;$('filter').onchange=()=>{shown=50;renderHistory()};
+function showPage(page){
+ for(const key of ['monitor','settings','history']){$(key).hidden=key!==page;$(key+'Tab').classList.toggle('selected',key===page)}
+ if(page==='history')void loadHistory();
+ if(page==='monitor'&&typeof updateMonitor==='function')void updateMonitor();
+}
+function route(){showPage(location.hash==='#history'?'history':location.hash==='#settings'?'settings':'monitor')}
+$('settingsTab').onclick=()=>{location.hash='settings';showPage('settings')};
+$('historyTab').onclick=()=>{location.hash='history';showPage('history')};
+$('monitorTab').onclick=()=>{location.hash='monitor';showPage('monitor')};
+$('refresh').onclick=loadHistory;$('filter').onchange=()=>{shown=50;renderHistory()};
+window.addEventListener('hashchange',route);route();
 
 LimboDomains.host().then(h=>{$('stakeDomain').value=h;});
 $('saveDomain').onclick=async()=>{try{

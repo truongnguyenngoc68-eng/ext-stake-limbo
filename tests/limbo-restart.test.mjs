@@ -77,7 +77,7 @@ async function panelFixture(){
  const w=ui.window;let poll;const sent=[];
  const event={addListener(){}};
  w.chrome={tabs:{query:async()=>[{id:10,active:true,url:'https://stake1022.com/vi/casino/games/limbo'}],onRemoved:event,onUpdated:event,sendMessage:async(id,message)=>{sent.push({id,message});await new Promise(r=>setImmediate(r));return core.remote(message)}}};
- w.chrome.storage={local:{get:async()=>({})},onChanged:{addListener(){}}};w.chrome.runtime={openOptionsPage(){}};w.eval(readFileSync(new URL('../limbo-tool/domains.js',import.meta.url),'utf8'));w.setInterval=fn=>{poll=fn};w.eval(readFileSync(new URL('../limbo-tool/panel.js',import.meta.url),'utf8'));
+ w.chrome.storage={local:{get:async()=>({})},onChanged:{addListener(){}}};w.chrome.runtime={openOptionsPage(){}};w.eval(readFileSync(new URL('../limbo-tool/domains.js',import.meta.url),'utf8'));w.setInterval=(fn,ms)=>{if(ms===750)poll=fn};w.eval(readFileSync(new URL('../limbo-tool/panel.js',import.meta.url),'utf8'));
  const flush=async()=>{for(let i=0;i<8;i++)await new Promise(r=>setImmediate(r))};await flush();
  return {core,ui,w,sent,flush,poll:()=>poll(),close(){core.dom.window.close();ui.window.close()}};
 }

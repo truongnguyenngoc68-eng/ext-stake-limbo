@@ -1,13 +1,11 @@
 const tabs=document.getElementById('tabs'),app=document.getElementById('app'),connection=document.getElementById('connection');
-let monitoredTabs=[],monitorBusy=false;
 let source='',busy=false,mounted=false,queue=Promise.resolve(),revision=0;
 async function refresh(){
  const all=(await chrome.tabs.query({url:await LimboDomains.patterns()})).filter(t=>/\/casino\/games\/limbo\/?(?:\?|$)/.test(t.url||''));
- monitoredTabs=all;
  const previous=source;
  tabs.replaceChildren(new Option('Chọn tab Limbo',''),...all.map(t=>new Option(`Limbo · tab ${t.id}${t.active?' · đang mở':''}`,String(t.id))));
  if(all.some(t=>String(t.id)===previous))source=previous;else source=String(all.find(t=>t.active)?.id|| (all.length===1?all[0].id:''));
- tabs.value=source;void updateMonitor();if(previous!==source){mounted=false;app.replaceChildren()}
+ tabs.value=source;if(previous!==source){mounted=false;app.replaceChildren()}
 }
 function values(){return Object.fromEntries([...app.querySelectorAll('input[id],select[id]')].map(e=>[e.id,e.value]));}
 function sync(action){
@@ -43,40 +41,7 @@ document.getElementById('settings').onclick=()=>chrome.runtime.openOptionsPage()
 
 document.getElementById('extensionVersion').textContent='v'+(chrome.runtime.getManifest?.().version||'Không xác định');
 
-const monitorCards=document.getElementById('monitorCards'),monitorCount=document.getElementById('monitorCount');
-const stateNames={OFF:'Đã tắt',PREPARE:'Chuẩn bị',WAIT_START:'Chờ xác nhận',RUNNING:'Đang chạy',WAIT_IDLE:'Chờ chạy lại',STOPPING:'Đang dừng',RELOADING:'Đang reload'};
-function node(tag,text,className){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(className)e.className=className;return e;}
-function monitorCard(tab,data){
- const card=node('article',undefined,'tab-card'+(String(tab.id)===source?' selected':''));
- const head=node('div',undefined,'card-head'),choose=node('button','Tab '+tab.id+' · ×'+(data?.config?.target??'—'));
- choose.type='button';choose.title='Chọn tab để xem cấu hình';choose.onclick=()=>{tabs.value=String(tab.id);tabs.onchange();void updateMonitor()};
- head.append(choose,node('span',data?(stateNames[data.state]||'Không xác định'):'Mất kết nối','badge '+(!data?'error':data.state==='RUNNING'?'running':'')));card.append(head);
- if(data){
-  const currency=data.wallet?.currency?.toUpperCase()||'',stats=data.wallet?.displayedStats;
-  const format=n=>typeof n==='number'&&Number.isFinite(n)?n.toFixed(8):'—';
-  const metrics=node('div',undefined,'card-metrics');
-  metrics.append(node('span','Cược: '+format(data.amount)+' '+currency),node('span','Đã bắt đầu: '+data.cycles+' lượt'));
-  const totals=node('div',undefined,'card-metrics');
-  totals.append(node('span','Profit: '+format(stats?.profit)+' '+currency,stats?.profit>0?'positive':stats?.profit<0?'negative':''),node('span','Volume: '+format(stats?.volume)));
-  card.append(metrics,totals,node('div',data.status,'card-status'));
- }else card.append(node('div','Tab đang tải hoặc chưa có kết nối. F5 tab nếu vừa cập nhật extension.','card-status'));
- return card;
-}
-async function updateMonitor(){
- if(monitorBusy)return;monitorBusy=true;
- const current=[...monitoredTabs];
- try{
-  const snapshots=await Promise.all(current.map(async tab=>{
-   let timer;
-   try{return await Promise.race([chrome.tabs.sendMessage(tab.id,{type:'limbo-monitor'}),new Promise(resolve=>{timer=setTimeout(()=>resolve(null),2500)})]);}catch(error){globalThis.LimboLog?.emit('monitor.tab.error',{tabId:tab.id,error},'error');return null}finally{clearTimeout(timer)}
-  }));
-  if(current.length!==monitoredTabs.length||current.some((t,i)=>t.id!==monitoredTabs[i]?.id))return;
-  monitorCount.textContent=current.length+' tab · '+snapshots.filter(s=>s?.state==='RUNNING').length+' đang chạy';
-  monitorCards.replaceChildren(...current.map((tab,i)=>monitorCard(tab,snapshots[i])));
-  if(!current.length)monitorCards.append(node('p','Mở các tab Limbo trên tên miền đã cài để theo dõi tại đây.','monitor-empty'));
- }finally{monitorBusy=false;}
-}
-setInterval(()=>void updateMonitor(),1500);
-setInterval(()=>void refresh().catch(()=>{}),5000);
-
 document.getElementById('debugLogs').onclick=()=>chrome.tabs.create({url:chrome.runtime.getURL('debug.html')});
+
+document.getElementById('openMonitor').onclick=()=>chrome.tabs.create({url:chrome.runtime.getURL('options.html#monitor')});
+setInterval(()=>void refresh().catch(()=>{}),5000);
