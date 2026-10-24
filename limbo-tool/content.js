@@ -2,13 +2,14 @@
   'use strict';
   if (window.__limboRestart) return;
   window.__limboRestart = true;
+  const documentId=crypto.randomUUID();
   const visible=e=>!!e&&e.getClientRects().length>0;
   const one=id=>{const es=[...document.querySelectorAll(`[data-testid="${id}"]`)].filter(visible);return es.length===1?es[0]:null};
   const numeric=s=>String(s).trim()?Number(String(s).replace(',','.')):NaN;
   const money=s=>{const text=String(s).trim().replace(',','.');return /^(?:\d+(?:\.\d{1,8})?|\.\d{1,8})$/.test(text)?Number(text):NaN};
   const isLimbo=()=>/\/casino\/games\/limbo\/?$/.test(location.pathname);
-  let statCycle='';
-  function stat(event){globalThis.LimboLog?.emit('bet.'+event.kind,event,event.kind==='issue'?'error':'info',event.trace||event.cycle);try{if(typeof chrome!=='undefined'&&chrome.runtime?.sendMessage)void chrome.runtime.sendMessage({type:'limbo-stat-event',event}).catch(()=>{});}catch{}}
+  let statCycle='',lastProgress=Date.now(),healthVolume=null;
+  function stat(event){if(event.kind==='bet')lastProgress=Date.now();globalThis.LimboLog?.emit('bet.'+event.kind,event,event.kind==='issue'?'error':'info',event.trace||event.cycle);try{if(typeof chrome!=='undefined'&&chrome.runtime?.sendMessage)void chrome.runtime.sendMessage({type:'limbo-stat-event',event}).catch(()=>{});}catch{}}
   function startStats(){
     statCycle=crypto.randomUUID();document.documentElement.setAttribute('data-limbo-stat-cycle',statCycle);
     stat({kind:'start',id:statCycle,currency:identity,tp:config.tp,sl:config.sl});
@@ -53,6 +54,15 @@
   document.documentElement.append(host);
   const field=id=>root.querySelector('#'+id),status=root.querySelector('output');
   let state='OFF',config=null,startedAt=0,lastAction=0,stableAt=0,idleAt=0,readyAt=0,runningSeen=false,restartOnly=false,cycles=0,identity='',reloadAt=0,reloadWanted=false,initialReady=true,statsRequestedAt=0;
+  function healthSnapshot(){
+    const volume=walletSnapshot().displayedStats?.volume;
+    if(Number.isFinite(volume)&&volume!==healthVolume){healthVolume=volume;lastProgress=Date.now();}
+    return {active:state!=='OFF',state,reason:status.textContent,online:globalThis.navigator?.onLine!==false,lastProgress};
+  }
+  function publishHealth(){try{if(typeof chrome!=='undefined'&&chrome.runtime?.sendMessage)void chrome.runtime.sendMessage({type:'limbo-health',health:healthSnapshot()}).catch(()=>{});}catch{}}
+  if(typeof chrome!=='undefined'&&chrome.runtime?.onMessage)chrome.runtime.onMessage.addListener((m,_s,reply)=>{if(m.type==='limbo-health-read')reply(healthSnapshot());});
+  setInterval(publishHealth,15000);
+  window.addEventListener('offline',publishHealth);window.addEventListener('online',publishHealth);
   const debug=(event,data={},level='info',trace)=>globalThis.LimboLog?.emit(event,data,level,trace);
   function nativeAuto(){
     const buttons=[...document.querySelectorAll('[data-testid="auto-bet-button"]')].filter(visible);
@@ -109,10 +119,10 @@
   field('amount').addEventListener('input',preview);
   if(typeof chrome!=='undefined'&&chrome.storage?.local){initialReady=false;chrome.storage.local.get(storageKey).then(s=>{if(s[storageKey]&&valid(s[storageKey]))showConfig(s[storageKey]);}).catch(error=>debug('config.load.error',{error},'error')).finally(()=>{initialReady=true;restore()});}
   function clearResume(){try{sessionStorage.removeItem(resumeKey)}catch{}}
-  function off(t){const trace=crypto.randomUUID();debug('tool.stop',{reason:t,before:debugSnapshot(),diagnostics:diagnosticChecks()},'error',trace);endStats('other');state='OFF';reloadWanted=false;runningSeen=false;restartOnly=false;clearResume();for(const k of fields)field(k).disabled=false;field('toggle').textContent='Bắt đầu Auto';notice(t);debug('tool.stopped',{reason:t,after:debugSnapshot()},'info',trace);}
+  function off(t){const trace=crypto.randomUUID();debug('tool.stop',{reason:t,before:debugSnapshot(),diagnostics:diagnosticChecks()},'error',trace);endStats('other');state='OFF';reloadWanted=false;runningSeen=false;restartOnly=false;clearResume();for(const k of fields)field(k).disabled=false;field('toggle').textContent='Bắt đầu Auto';notice(t);debug('tool.stopped',{reason:t,after:debugSnapshot()},'info',trace);publishHealth();}
   function arm(c,expected=''){
-    statsRequestedAt=0;config=c;identity=expected;state='PREPARE';startedAt=Date.now();lastAction=0;stableAt=0;idleAt=0;readyAt=0;runningSeen=false;restartOnly=false;reloadWanted=false;
-    reloadAt=c.reload>0?Date.now()+c.reload*60000:0;for(const k of fields)field(k).disabled=true;field('toggle').textContent='Tắt Auto / chạy lại';notice('Đang mở Tự động và Nâng cao…');
+    lastProgress=Date.now();statsRequestedAt=0;config=c;identity=expected;state='PREPARE';startedAt=Date.now();lastAction=0;stableAt=0;idleAt=0;readyAt=0;runningSeen=false;restartOnly=false;reloadWanted=false;
+    reloadAt=c.reload>0?Date.now()+c.reload*60000:0;for(const k of fields)field(k).disabled=true;field('toggle').textContent='Tắt Auto / chạy lại';notice('Đang mở Tự động và Nâng cao…');publishHealth();
   }
   function restore(){let saved;try{saved=JSON.parse(sessionStorage.getItem(resumeKey)||'null')}catch{}clearResume();if(!saved||!valid(saved.config)||Date.now()-saved.time>300000||Date.now()<saved.time||!isLimbo())return;showConfig(saved.config);arm(saved.config,saved.currency);notice('Sau reload: đang kiểm tra game trước khi chạy tiếp…');}
   if(initialReady)restore();
@@ -164,7 +174,7 @@
   setInterval(()=>{
     if(state==='OFF'||state==='RELOADING')return;
     if(!isLimbo())return off('Đã rời trang Limbo; tool đã tắt.');
-    if([...document.querySelectorAll('[role="alert"]')].some(e=>visible(e)&&/lỗi|không đủ|thất bại|error|insufficient|failed|limit exceeded/i.test(e.textContent)))return off('Trang báo lỗi; tool đã tắt.');
+    const pageError=[...document.querySelectorAll('[role="alert"]')].find(e=>visible(e)&&/lỗi|không đủ|thất bại|error|insufficient|failed|limit exceeded/i.test(e.textContent));if(pageError)return off('Trang báo lỗi: '+pageError.textContent.trim().slice(0,400)+' · tool đã tắt.');
     if(reloadAt&&Date.now()>=reloadAt)reloadWanted=true;
     const amount=one('input-game-amount');
     const currentCurrency=amount?.getAttribute('data-bet-amount-active-currency');
@@ -230,9 +240,26 @@
     pressStart(button,'start');
   },250);
   if(typeof chrome!=='undefined'&&chrome.runtime?.onMessage)chrome.runtime.onMessage.addListener((m,_s,reply)=>{
+    if(m.type==='limbo-control'){
+      const respond=(ok,error)=>reply({ok,error,state,config:readConfig(),...presentation(),reason:status.textContent});
+      if(m.expectedDocumentId!==undefined&&(m.expectedDocumentId!==documentId||!Number.isFinite(m.deadline)||Date.now()>m.deadline))return respond(false,'Lệnh hết hạn hoặc tab đã tải lại; không thực hiện.');
+      if(!['start','stop','save'].includes(m.action))return respond(false,'Lệnh không hợp lệ.');
+      if(!initialReady)return respond(false,'Tab đang tải cấu hình.');
+      // Explicit desired state; a delayed or repeated command never toggles back.
+      if(m.action==='stop'){if(state!=='OFF')off('Đã tắt tool từ Monitor; lượt Auto đang chạy trên game vẫn tiếp tục.');return respond(true);}
+      if(m.action==='start'&&state!=='OFF')return respond(true);
+      if(state!=='OFF'||nativeAuto().state!=='IDLE')return respond(false,'Chờ game dừng và tắt tool trước khi sửa hoặc bật lại.');
+      if(!isLimbo())return respond(false,'Tab không còn ở trang Limbo.');
+      if(m.action==='save'){
+        const c=m.config;
+        if(!c||!valid(c))return respond(false,'Thông số không hợp lệ; chưa thay đổi cấu hình.');
+        showConfig(c);preview();saveConfig();return respond(true);
+      }
+      field('toggle').click();return respond(state!=='OFF',state==='OFF'?status.textContent:undefined);
+    }
     if(m.type==='limbo-monitor'){
       const amount=one('input-game-amount');
-      reply({state,...presentation(),reason:status.textContent,observerVersion:globalThis.chrome?.runtime?.getManifest?.().version,ready:initialReady,cycles,config:readConfig(),amount:amount?money(amount.value):null,wallet:walletSnapshot(),time:Date.now()});
+      reply({documentId,state,...presentation(),reason:status.textContent,observerVersion:globalThis.chrome?.runtime?.getManifest?.().version,ready:initialReady,cycles,config:readConfig(),amount:amount?money(amount.value):null,wallet:walletSnapshot(),time:Date.now()});
       return;
     }
     if(m.type!=='limbo-panel')return;

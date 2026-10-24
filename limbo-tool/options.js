@@ -1,11 +1,11 @@
 const $=id=>document.getElementById(id);
-const flags=['balance','tabs','volume','breakdown','profit','time','currency'];
+const flags=['balance','tabs','volume','breakdown','profit','time','currency','stopAlerts'];
 const sample={balance:{amount:55.94296881,currency:'usdt',time:Date.now()},read:5,count:5,totals:new Map([['USDT',{volume:32.52859372,profit:8.21187508,volumes:[10.60798626,4.73778197,4.2099868,6.55331384,6.41952485],profits:[-.08523485,1.90669619,2.58236136,.21866732,3.58938506]}]])};
 function preferences(){return {interval:Number($('interval').value),decimals:Number($('decimals').value),...Object.fromEntries(flags.map(k=>[k,$(k).checked]))};}
 function preview(){$('preview').textContent=LimboTelegram.format(sample,preferences())||'Chọn nội dung muốn gửi';}
 for(const id of ['interval','decimals',...flags])$(id).addEventListener('input',preview);
 chrome.storage.local.get(['telegram','telegramStatus']).then(({telegram:t,telegramStatus:s})=>{t??={};$('token').value=t.token||'';$('chat').value=t.chat||'';$('enabled').checked=!!t.enabled;const p=LimboTelegram.settings(t);for(const k of flags)$(k).checked=p[k];$('interval').value=p.interval;$('decimals').value=p.decimals;$('status').textContent=s||'';preview();}).catch(()=>{$('status').textContent='Không đọc được cấu hình.'});
-$('save').onclick=async()=>{const p=preferences();if(!Number.isInteger(p.interval)||p.interval<1||p.interval>1440){$('status').textContent='Chu kỳ từ 1 đến 1440 phút.';return}if(!['balance','tabs','volume','profit','time'].some(k=>p[k])){$('status').textContent='Chọn ít nhất một nội dung.';return}
+$('save').onclick=async()=>{const p=preferences();if(!Number.isInteger(p.interval)||p.interval<1||p.interval>1440){$('status').textContent='Chu kỳ từ 1 đến 1440 phút.';return}if(!['balance','tabs','volume','profit','time','stopAlerts'].some(k=>p[k])){$('status').textContent='Chọn ít nhất một nội dung.';return}
 const telegram={...p,token:$('token').value.trim(),chat:$('chat').value.trim(),enabled:$('enabled').checked};if(telegram.enabled&&(!/^\d+:[\w-]+$/.test(telegram.token)||! /^-?\d+$/.test(telegram.chat))){$('status').textContent='Kiểm tra token và Chat ID.';return}
 try{await chrome.storage.local.set({telegram});await chrome.runtime.sendMessage({type:'telegram-config'});$('status').textContent=telegram.enabled?'Đã lưu · gửi sau '+p.interval+' phút.':'Đã lưu · thông báo tắt.';}catch{$('status').textContent='Lưu chưa hoàn tất. Thử lại.'}};
 let historyRows=[],shown=50;
@@ -16,15 +16,19 @@ for(const r of rows.slice(0,shown)){const card=element('article','','session'),h
 if(rows.length>shown){const more=element('button','Xem thêm','more');more.onclick=()=>{shown+=50;renderHistory()};list.append(more)}}
 async function loadHistory(){try{const {limboHistory}=await chrome.storage.local.get('limboHistory');historyRows=limboHistory?.sessions||[];renderHistory();$('historyStatus').textContent='Lưu trên máy · số liệu từ lúc bắt đầu ghi nhận đến lần đo cuối.';}catch{$('historyStatus').textContent='Không đọc được lịch sử.'}}
 function showPage(page){
- for(const key of ['monitor','settings','history']){$(key).hidden=key!==page;$(key+'Tab').classList.toggle('selected',key===page)}
- if(page==='history')void loadHistory();
+ for(const key of ['monitor','configs','settings','history']){$(key).hidden=key!==page;$(key+'Tab').classList.toggle('selected',key===page)}
+ if(page==='configs'&&globalThis.LimboConfigHistory)void LimboConfigHistory.refresh();
+ if(page==='history'){void loadHistory();if(globalThis.LimboDailyUI)void LimboDailyUI.refresh();}
  if(page==='monitor'&&typeof updateMonitor==='function')void updateMonitor();
 }
-function route(){showPage(location.hash==='#history'?'history':location.hash==='#settings'?'settings':'monitor')}
+function route(){showPage(location.hash==='#configs'?'configs':location.hash==='#history'?'history':location.hash==='#settings'?'settings':'monitor')}
+
+$('configsTab').onclick=()=>{location.hash='configs';showPage('configs')};
 $('settingsTab').onclick=()=>{location.hash='settings';showPage('settings')};
 $('historyTab').onclick=()=>{location.hash='history';showPage('history')};
 $('monitorTab').onclick=()=>{location.hash='monitor';showPage('monitor')};
 $('refresh').onclick=loadHistory;$('filter').onchange=()=>{shown=50;renderHistory()};
+for(const id of ['legacyOpen','legacyClosed'])$(id).onchange=()=>{const open=$('legacyOpen').checked,closed=$('legacyClosed').checked;$('filter').value=open&&closed?'all':open?'open':closed?'closed':'none';shown=50;renderHistory();};
 window.addEventListener('hashchange',route);route();
 
 LimboDomains.host().then(h=>{$('stakeDomain').value=h;});

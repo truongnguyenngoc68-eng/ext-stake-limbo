@@ -30,6 +30,30 @@ function fixture({manual=false,advanced=false,resume=null,remote=false,logging=f
  return {logs,dom,w,one,button,input,panel,submissions,stops,running,complete,remote:m=>{let result;for(const fn of listeners)fn(m,{},r=>{result=r});return result},click:()=>panel.querySelector('#toggle').click(),advance:(ms=250)=>{time+=ms;tick()},pump:(steps=100)=>{for(let i=0;i<steps;i++){time+=250;tick()}},until:(n)=>{for(let i=0;i<130&&submissions.length<n;i++){time+=250;tick()}},manualStop:()=>{manualListener({isTrusted:true,target:button});button.click()},field:(id,v)=>{panel.querySelector('#'+id).value=v},status:()=>panel.querySelector('output').textContent};
 }
 const verify=s=>{assert.equal(s.amount,.001);assert.equal(s.tp,1.1);assert.equal(s.sl,1);assert.equal(s.target,9);assert.equal(s.winReset,true);assert.equal(s.lossReset,false);assert.equal(s.loss,14)};
+test('Monitor commands save atomically, start once and stop only the tool',()=>{
+ const f=fixture({remote:true});try{
+  const config={amount:.0008,tp:8,sl:8,target:375,limit:0,winMode:'reset',win:0,lossMode:'increase',loss:.29,reload:0};
+  assert.equal(f.remote({type:'limbo-control',action:'save',config:{...config,sl:0}}).ok,false);
+  assert.equal(f.remote({type:'limbo-control',action:'save'}).ok,false);
+  assert.equal(f.remote({type:'limbo-control',action:'save',config}).ok,true);
+  assert.equal(f.submissions.length,0);assert.equal(f.remote({type:'limbo-monitor'}).config.target,375);
+  assert.equal(f.remote({type:'limbo-control',action:'start'}).ok,true);
+  assert.equal(f.remote({type:'limbo-control',action:'start'}).ok,true);f.until(1);assert.equal(f.submissions.length,1);
+  assert.equal(f.remote({type:'limbo-control',action:'save',config}).ok,false);
+  assert.equal(f.remote({type:'limbo-control',action:'stop'}).ok,true);
+  assert.equal(f.remote({type:'limbo-control',action:'stop'}).ok,true);assert.equal(f.stops.length,0);
+  assert.equal(f.remote({type:'limbo-control',action:'start'}).ok,false);
+  assert.equal(f.remote({type:'limbo-control',action:'save',config}).ok,false);
+ }finally{f.dom.window.close();}
+});
+test('Remote commands cannot target another document or execute after their deadline',()=>{
+ const f=fixture({remote:true});try{
+  const documentId=f.remote({type:'limbo-monitor'}).documentId;
+  assert.equal(f.remote({type:'limbo-control',action:'start',expectedDocumentId:'wrong',deadline:100000}).ok,false);
+  assert.equal(f.remote({type:'limbo-control',action:'start',expectedDocumentId:documentId,deadline:500}).ok,false);assert.equal(f.submissions.length,0);
+  assert.equal(f.remote({type:'limbo-control',action:'start',expectedDocumentId:documentId,deadline:100000}).ok,true);f.until(1);assert.equal(f.submissions.length,1);
+ }finally{f.dom.window.close();}
+});
 for(const count of [1,2,3,5,10])for(const scenario of ['raised','lowered','blank','disabled','rejected'])test(`Stake-only restart ${scenario} over ${count} rounds`,()=>{
  const f=fixture({manual:true});try{
   f.click();f.until(1);assert.equal(f.submissions.length,1);verify(f.submissions[0]);f.advance();

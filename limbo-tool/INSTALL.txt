@@ -1,5 +1,27 @@
 LIMBO — phiên bản hiển thị trực tiếp từ manifest.json
 
+LỊCH SỬ HIỆN TOÀN BỘ NGÀY & NẾN SỐ DƯ (1.8.1)
+Đã bỏ bước tích chọn ngày/tab. Mở Lịch sử theo ngày là thấy toàn bộ các ngày từ mới đến cũ, mỗi ngày có tổng Vol/lãi lỗ/số ván; bấm mở chi tiết tab, sự kiện hoặc Biểu đồ nến số dư theo thời gian.
+Sửa kiểm tra quyền đọc nhật ký: trang options của chính tiện ích vẫn được đọc khi Chrome cung cấp sender.tab. Không mở quyền đọc cho trang game hoặc tiện ích khác. Báo lỗi đọc cụ thể thay vì chỉ thông báo chung.
+Mẫu ví khoảng 10 giây từ các tab được gộp thành nến OHLC 1 phút, có thể xem nến 5/15/60 phút. Số dư tuyệt đối không cộng giữa các tab; tách tên miền và loại tiền vì chưa xác minh danh tính tài khoản. Thời điểm ghi nhận theo giờ Việt Nam, có bảng Mở/Cao/Thấp/Đóng. Số dư bao gồm ảnh hưởng nạp/rút hoặc thao tác khác nên không coi tăng/giảm ví là lãi/lỗ cược. Khoảng không có mẫu để trống. Không có dữ liệu số dư trước bản này và không tạo lịch sử giả từ profit. Dữ liệu cược/ngày cũ vẫn được giữ khi nâng cấp IndexedDB.
+
+NHẬT KÝ THEO NGÀY / CHỈ DÙNG PC (1.8.0)
+Đã bỏ module, giao diện và tác vụ nền điều khiển web/điện thoại. Sau Reload extension, khóa ghép thiết bị và lệnh từ xa trên máy này được gỡ; Monitor, Telegram, cấu hình mẫu và lịch sử cũ được giữ. Website không bị xóa.
+Mở Lịch sử theo ngày: tích ngày, tích tab; mặc định Hôm nay và tất cả tab. Có Hôm nay, Hôm qua, Chọn tất cả (tối đa 31 ngày), Bỏ chọn; tích Hiện chi tiết từng tab / Hiện nhật ký sự kiện. Lịch sử tab cũ nằm trong mục thu gọn, lọc bằng tích Đang mở / Đã đóng.
+Mỗi ngày tính từ 00:00 đến 23:59:59 giờ Việt Nam, không theo múi giờ Windows. Vol, lãi/lỗ và số ván gộp từ các cược Limbo được observer xác nhận; tách từng loại tiền. Ngày tính theo thời điểm nhận phản hồi, không phải thời điểm máy chủ chốt cược. Chống cộng trùng bằng mã cược trong IndexedDB, kể cả nhiều tab, F5 hoặc mở lại Chrome. Tổng ngày và mã cược được ghi cùng giao dịch.
+Chỉ bắt đầu ghi từ bản này; không tự đưa tổng cược cũ đang hiện trên trang vào ngày mới. Lịch sử theo tab cũ vẫn giữ nguyên, không tự chia ngược sang ngày vì thiếu dữ liệu thời gian. Cược bị bỏ lỡ trong thời gian Chrome tắt, observer chưa nạp hoặc mất phản hồi không thể tự khôi phục; nhật ký gắn cảnh báo khi phát hiện thiếu dữ liệu. Các sự kiện cập nhật/mở Chrome, bật/tắt tool, sửa chiến thuật, tải lại, lỗi mạng và tab bất thường được ghi riêng; giao diện hiện tối đa 200 sự kiện mới nhất/ngày.
+Nhật ký lưu cục bộ trên máy, tồn tại qua F5, đóng mở Chrome và cập nhật cùng ID extension; gỡ tiện ích/xóa dữ liệu sẽ mất. Bản này không tự F5 và không thay đổi TP/SL; nhật ký không được dùng để tự cấp lại SL. Reload extension và F5 tab khi game đã dừng để observer mới ghi nhận đầy đủ.
+
+CẤU HÌNH / LỊCH SỬ (1.6.1)
+Tab riêng trên thanh menu: + Tạo cấu hình mới → đặt tên, điền thông số → Lưu cấu hình. Không cần mở game để tạo/sửa/lưu. Danh sách hiện rõ từng cấu hình; bấm Sửa rồi Lưu thay đổi cập nhật đúng mẫu đó, không tạo trùng. Các mẫu đã lưu ở bản 1.6.0 vẫn được giữ nguyên. Monitor chỉ còn chọn mẫu và nút mở trang quản lý.
+Dùng cho tab → chọn tab Limbo đang mở → Điền vào Monitor. Thao tác chỉ điền bản nháp; kiểm tra rồi bấm Lưu vào tab khi tool/game đã dừng. Không tự bật Auto. Cấu hình lưu bền trong Chrome storage; bản nháp chưa lưu sẽ có xác nhận nếu bỏ hoặc đóng trang.
+
+MONITOR & CẤU HÌNH ĐÃ LƯU (1.6.0)
+Monitor dùng bảng gọn, mỗi tab một dòng: game/tool, lãi lỗ, cược hiện tại, volume, lượt. Mở Chi tiết để xem lý do, số dư, TP/SL và thời điểm đo. Bật tool / Tắt tool gửi riêng cho tab trên dòng đó; Tắt tool chỉ tắt điều khiển, KHÔNG bấm Stop trên game.
+Bấm Sửa để mở cấu hình của đúng tab bên dưới. Chỉ sửa/lưu khi tool đã tắt và game đã dừng; tab dùng code cũ cần F5. Lưu vào tab không tự bắt đầu Auto. Bật tool kiểm tra lại cấu hình và thống kê theo quy trình hiện có. Lệnh lỗi/timeout không tự gửi lại.
+Cấu hình đang nhập được giữ riêng từng tab khi Monitor tự cập nhật hoặc chuyển sang sửa tab khác (bản nháp tồn tại trong lần mở trang Monitor). Chưa lưu bản nháp thì không bật tool cho tab đó; Lưu vào tab hoặc Lấy lại từ tab trước.
+Danh sách cấu hình đã lưu: nhập tên, Lưu mẫu mới; chọn mẫu để điền, kiểm tra rồi Lưu vào tab. Có Cập nhật mẫu, Đổi tên, Xóa mẫu (hỏi xác nhận). Lưu tối đa 100 mẫu trong Chrome storage của tiện ích, giữ qua đóng/mở Chrome và cập nhật code cùng ID; gỡ tiện ích hoặc xóa dữ liệu sẽ mất danh sách. Danh sách dùng chung cho các tab, không chứa token Telegram. Kiểm thử lệnh dùng game giả lập, không chạy cược thật.
+
 CẬP NHẬT
 1. Dừng game trước khi cập nhật.
 2. Giải nén, ghi đè các file trong đúng thư mục tiện ích đã cài.
@@ -7,6 +29,10 @@ CẬP NHẬT
 4. Mở Telegram & Lịch sử từ panel. Giữ nguyên thư mục/ID tiện ích để giữ token và lịch sử.
 
 TELEGRAM
+Cảnh báo tab dừng (1.5.9): trong Telegram, bật “Báo Telegram khi tab dừng / gặp lỗi” rồi Lưu cấu hình. Mặc định bật khi Telegram đã bật. Tin riêng gồm mã tab, URL, thời điểm và lý do quan sát được. Báo tool tắt (kể cả tắt thủ công), lỗi trang, tab đóng/chuyển trang/Chrome giải phóng, không phản hồi hoặc không có ván mới ít nhất 90 giây. Kiểm tra nền mỗi phút; cảnh báo treo có thể đến sau khoảng 90–150 giây hoặc lâu hơn nếu Chrome/máy tạm ngưng. Reload bình thường có khoảng chờ để kết nối lại. Không tự click hoặc dừng game khi cảnh báo.
+Mất mạng toàn máy: lưu cảnh báo cục bộ, thử gửi lại tối đa mỗi phút khi kết nối Telegram trở lại; tin ghi thời điểm phát hiện. Giữ tối đa 100 cảnh báo chờ. Chrome phải còn mở và máy thức để theo dõi; không thể gửi ngay khi mất mạng hoặc Chrome/máy đã tắt. Chưa xác nhận nguyên nhân thì ghi rõ, không kết luận chắc chắn là mất mạng.
+Kiểm thử cảnh báo dùng Telegram giả lập; không gửi tin thật hoặc chạy cược thật để thử.
+
 Chọn chu kỳ 1–1440 phút, 0–8 số lẻ và các dòng muốn gửi. Mặc định 3 phút, 2 số lẻ, số dư/số tab/Vol/phép cộng/thời gian. Không gửi tin thử khi lưu. Tổng tính từ số gốc rồi làm tròn; các số đã làm tròn có thể cộng lệch 0.01. Tách từng loại tiền. Tab thiếu dữ liệu được báo riêng. Không hiện TP/SL chưa đo được.
 
 LỊCH SỬ

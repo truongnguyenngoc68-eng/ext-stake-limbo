@@ -1,13 +1,15 @@
-importScripts('debug-store.js','debug-log.js','domains.js','stats.js','stats-store.js','telegram-format.js','history.js','history-store.js');
+importScripts('debug-store.js','debug-log.js','domains.js','stats.js','stats-store.js','telegram-format.js','history.js','history-store.js','daily-history.js','daily-store.js','health-monitor.js');
 const alarmName='limbo-balance-3m';let sending=false;
 async function schedule(){const {telegram}=await chrome.storage.local.get('telegram');const minutes=LimboTelegram.settings(telegram).interval;if(telegram?.enabled)await chrome.alarms.create(alarmName,{delayInMinutes:minutes,periodInMinutes:minutes});else await chrome.alarms.clear(alarmName)}
 chrome.runtime.onInstalled.addListener(()=>Promise.all([schedule(),registerDomain().catch(()=>{})]));chrome.runtime.onStartup.addListener(()=>Promise.all([schedule(),registerDomain().catch(()=>{})]));
 chrome.action.onClicked.addListener(tab=>chrome.sidePanel.open({tabId:tab.id}));
 chrome.runtime.onMessage.addListener((m,_s,reply)=>{if(m.type==='open-options'){chrome.runtime.openOptionsPage();return}if(m.type==='telegram-config'){schedule().then(()=>reply({ok:true}));return true}});
 chrome.runtime.onMessage.addListener((m,sender,reply)=>{
- if(m.type!=='limbo-stat-event'||!sender.tab||!LimboDomains.validUrl(sender.url))return;
+ if(m.type!=='limbo-stat-event'||!sender.tab||(sender.frameId&&sender.frameId!==0)||!LimboDomains.validUrl(sender.url))return;
  if(!m.event||!['start','end','bet','issue','request'].includes(m.event.kind))return;
- LimboStatsStore.update(m.event).then(()=>reply({ok:true})).catch(()=>{void chrome.storage.local.set({statisticsError:true});reply({ok:false})});return true;
+ const now=Date.now(),observed=Number.isFinite(m.event.time)&&m.event.time<=now+1000&&m.event.time>=now-300000?m.event.time:now;
+ const daily=m.event.kind==='bet'?{...m.event,time:observed,tab:sender.tab.id}:m.event.kind==='issue'?{kind:'event',name:'Thiếu / lỗi phản hồi cược',tab:sender.tab.id,issue:true}:null;
+ Promise.all([LimboStatsStore.update(m.event),daily&&globalThis.LimboDailyStore?.record(daily)]).then(()=>reply({ok:true})).catch(()=>{void chrome.storage.local.set({statisticsError:true});reply({ok:false})});return true;
 });
 chrome.alarms.onAlarm.addListener(async alarm=>{
 if(alarm.name!==alarmName||sending)return;sending=true;
@@ -41,6 +43,9 @@ chrome.runtime.onMessage.addListener((m,sender,reply)=>{if(m.type!=='stake-domai
 
 async function saveDebug(entry,sender){
  try{
+  const names={'tool.stop':'Tắt tool','tool.config.change':'Sửa chiến thuật','auto.start.input':'Bắt đầu lượt Auto','auto.restart.input':'Chạy lại lượt Auto','reload.error':'Lỗi tải lại','page.hide':'Rời trang / tải lại','page.bet.network.error':'Lỗi mạng khi cược'};
+  const label=names[entry?.event]||(entry?.event==='state.notice'&&/Đang tải lại trang/.test(entry?.data?.output||'')?'Tải lại trang':null);
+  if(label)await globalThis.LimboDailyStore?.record({kind:'event',tab:sender?.tab?.id??null,name:label,detail:entry.data?.reason||entry.data?.output||(entry.data?.id?entry.data.id+': '+entry.data.value:''),issue:/error|network/.test(entry.event)}).catch(()=>{});
   const id=await LimboJournal.append({...LimboLog.clean(entry),tabId:sender?.tab?.id??null,frameId:sender?.frameId??null,receivedAt:new Date().toISOString()});
   await chrome.storage.local.set({limboDebugHealth:{error:null,time:Date.now(),id}});
   return {ok:true,id};

@@ -1,6 +1,23 @@
 node_modules/
 outputs/
+.openai/
 slide-lab-v1.0.13-extension-update/
+limbo-tool-v*/
+limbo-log-update-*/
+solid-log/
+*.zip
+*.tar.gz
+*-results.txt
+
+# Nested standalone repositories (pushed to their own GitHub repos)
+ccam-control/
+doc-ho-android/
+marketing-ai-office/
+openclaw-office-ui/
+sites/
+tai-lieu-android/
+
+# Environment & OS
 .env
 .env.*
 !.env.example

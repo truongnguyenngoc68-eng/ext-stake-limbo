@@ -15,7 +15,7 @@
  const failure=e=>({name:e?.name,message:e?.message||String(e),stack:e?.stack});
  window.addEventListener('error',e=>log('error',{error:failure(e.error),message:e.message,file:e.filename,line:e.lineno,column:e.colno},'error'));
  window.addEventListener('unhandledrejection',e=>log('rejection',{error:failure(e.reason)},'error'));
- const post=event=>window.postMessage({type:'limbo-confirmed-bet-v1',event},location.origin);
+ const post=event=>window.postMessage({type:'limbo-confirmed-bet-v1',event:{...event,time:Date.now()}},location.origin);
  function request(raw,url){
   try{if(new URL(url,location.href).origin!==location.origin)return null;
    const body=JSON.parse(raw);if(typeof body.query!=='string'||! /\bmutation\b/.test(body.query)||! /\blimboBet\b/.test(body.query))return null;
